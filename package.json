@@ -1,0 +1,28 @@
+{
+  "name": "traffino",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs --dev",
+    "preview": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build": "node scripts/build.mjs",
+    "build:dev": "node scripts/build.mjs --dev",
+    "profile": "node scripts/profile.mjs",
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "test:browser:production": "node scripts/browser-smoke.mjs --production",
+    "check": "npm run test && npm run build",
+    "package": "npm run check && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "core-js": "^3.50.0",
+    "three": "0.160.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/preset-env": "^7.29.7",
+    "esbuild": "^0.25.9",
+    "fflate": "^0.8.2"
+  }
+}

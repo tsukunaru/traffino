@@ -8,7 +8,7 @@ export class CityView {
   constructor(host,map) {
     this.host=host;this.map=map;this.scene=new THREE.Scene();
     this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
-    this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.22;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.06;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this.canvas=this.renderer.domElement;host.append(this.canvas);this.camera=new THREE.OrthographicCamera(-40,40,30,-30,.1,200);
     this.baseAngle=0;this.cameraAngle=.42;this.zoom=1;this.currentZoom=1;this.up=new THREE.Vector3(0,1,0);
     this.scratch=new THREE.Object3D();this.carRoot=new THREE.Object3D();this.matrix=new THREE.Matrix4();this.projected=new THREE.Vector3();this.color=new THREE.Color();this.skyColor=new THREE.Color();this.floorColor=new THREE.Color();this.sunColor=new THREE.Color();
@@ -102,7 +102,7 @@ export class CityView {
     if(name==='pedestrianPassed')this.burst(data.x,data.z,0xb3ddb0,3);
     if(name==='jamResolved'){const p=rotate(-this.map.lane,-this.map.entry-2,data.direction);this.burst(p.x,p.z,0xaad8a3,7);this.heroState='relief';this.heroUntil=now+.7;}
     if(name==='emergency'||name==='highFlow')this.cameraImpulse=name==='emergency'?.012:.006;
-    if(name==='reward'||name==='unlock'){this.heroState='celebrate';this.heroUntil=now+1.3;this.burst(5.25,5.65,0xffd978,15);}
+    if(name==='reward'||name==='unlock'||name==='circuitComplete'){this.heroState='celebrate';this.heroUntil=now+1.3;this.burst(5.25,5.65,0xffd978,15);}
   }
   person(x,z,id,time,walking,angle=0) {
     const colors=[0xda846c,0x759ead,0xe5bc63,0x94ab77,0xc398ac],skin=[0xefc199,0xc88c69,0xe7ad86],stride=walking?Math.sin(time*9+id)*.20:Math.sin(time*2+id)*.015;

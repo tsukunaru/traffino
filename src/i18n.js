@@ -8,5 +8,7 @@ export const strings={
 };
 Object.assign(strings.ru,{newVehicle:'Новая машина в гараже',jamSaved:'Пробка спасена!',rankUp:'Новое звание',unlocked:'Теперь доступно',readyChallenges:'Задания готовы',watchAd:'Смотреть рекламу',adThanks:'Бонус получен: +25 монет',adUnavailable:'Реклама недоступна. Можно продолжить игру.',adCosmetic:'Добровольный бонус: 25 монет только для косметики. Один раз за завершённую смену.',filter:'Фильтр',natural:'Обычный',warm:'Тёплый',cool:'Прохладный',fullscreen:'Полный экран'});
 Object.assign(strings.en,{newVehicle:'New vehicle in the garage',jamSaved:'Gridlock averted!',rankUp:'New rank',unlocked:'Now available',readyChallenges:'Challenges ready',watchAd:'Watch an ad',adThanks:'Bonus received: +25 coins',adUnavailable:'Ad unavailable. You can keep playing.',adCosmetic:'Optional bonus: 25 cosmetic coins. Once per finished shift.',filter:'Filter',natural:'Natural',warm:'Warm',cool:'Cool',fullscreen:'Fullscreen'});
+Object.assign(strings.ru, {circuits:'Зелёные круги', circuitComplete:'Круг замкнулся!', circuitHint:'Пропусти машину с каждой стороны без аварии', circuitNext:'Остались'});
+Object.assign(strings.en, {circuits:'Green circuits', circuitComplete:'Circuit complete!', circuitHint:'Clear every approach without a crash', circuitNext:'Remaining'});
 export function translator(lang) {return key=>strings[lang]?.[key]??strings.en[key]??key;}
 

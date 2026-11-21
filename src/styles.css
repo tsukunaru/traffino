@@ -64,3 +64,10 @@ body{font-family:Nunito,'Segoe UI',sans-serif}button{font-weight:850}h1,h2,h3{fo
 @media(max-aspect-ratio:4/5){.toy-header{top:3%;left:5%}.town-badge{display:none}.toy-header .settings-button{margin-left:auto}.toy-menu{inset:3% 5% auto;width:90%;max-width:none;height:86%;text-align:center}.toy-menu .illustrated-title{margin:0 auto;width:80%;max-width:380px}.illustrated-title img{max-height:24vh}.illustrated-title>span{font-size:9px;letter-spacing:4px}.toy-menu .toy-invitation{display:none}.toy-menu .start{position:absolute;left:5%;width:90%;bottom:calc(3% + 88px);min-height:51px;font-size:17px;padding:9px 12px}.toy-menu .mode-grid{position:absolute;bottom:2%;left:0;width:100%;margin:0;gap:8px}.toy-menu .mode-button{height:76px;font-size:10px;padding:0 2px 7px;border-radius:17px}.vehicle-art{max-width:75px}.toy-menu .unlock-note{position:absolute;bottom:calc(3% + 148px);width:100%;margin:0;font-size:9px}.toy-nav{left:5%;width:90%;bottom:3%;gap:8px}.toy-nav button{font-size:10px;padding:6px 2px;min-height:44px;flex-direction:row}.toy-nav button svg{width:17px;height:17px}.toy-save{display:none}.at-menu #world{top:24%;left:-12%;width:124%;height:50%;mask-image:linear-gradient(transparent,black 10%,black 90%,transparent);-webkit-mask-image:linear-gradient(transparent,black 10%,black 90%,transparent)}}
 /* Keep touch targets usable on short landscape screens too. */
 .ped-control,.toy-nav button,.toy-menu .start,.stop-all{min-width:44px;min-height:44px}
+
+.road-control.circuit-served::after {
+  content: '✓'; position: absolute; right: -5px; top: -5px;
+  width: 21px; height: 21px; border-radius: 50%;
+  background: #ffe3a3; color: #564b28; border: 2px solid #fffae9;
+  font: 900 14px/17px Nunito, sans-serif; box-shadow: 0 2px 4px #644b342f;
+}

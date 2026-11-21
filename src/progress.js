@@ -17,7 +17,7 @@ export function parseSave(raw) {
     for(const k of ['updatedAt','revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
     s.story=s.story.map((_,i)=>clamp(integer(x.story?.[i]),0,3));
     for(const k of Object.keys(s.best))s.best[k]=integer(x.best?.[k]);
-    for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts'])s.totals[k]=statistic(x.totals?.[k]);
+    for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits'])s.totals[k]=statistic(x.totals?.[k]);
     for(const id of Object.keys(VEHICLES))if(x.collection?.[id])s.collection[id]={seen:integer(x.collection[id].seen),passed:integer(x.collection[id].passed)};
     for(const m of MISSIONS)s.missions[m.id]=x.missions?.[m.id]===true;
     s.cosmetics=COSMETICS.filter(c=>c.id==='classic'||x.cosmetics?.includes?.(c.id)).map(c=>c.id);

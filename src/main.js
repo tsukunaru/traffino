@@ -92,6 +92,7 @@ class App {
     if(name==='emergencyFailed')this.ui?.toast('emergencyFailed');
     if(name==='eventEnded')this.ui?.toast('eventEnd');
     if(name==='collision') {this.view.shakeLeft=.6;if(this.progress.data.settings.haptics)try{navigator.vibrate?.(80);}catch{}}
+    if(name==='circuitComplete'){this.audio.event('reward');this.ui.toastText(this.ui.t('circuitComplete')+' +'+B.circuitBonus);}
     if(name==='jamResolved'){this.ui?.toastText(this.ui.t('jamSaved')+' · '+this.ui.t(['north','east','south','west'][data.direction]));}
     if(name==='directionOpened'||name==='directionClosed')this.ui?.updateHUD();
     if(name==='ended') {

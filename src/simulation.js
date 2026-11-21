@@ -21,6 +21,9 @@ export class Simulation {
     this.stats={score:0,playTime:0,day:1,passed:0,cars:0,buses:0,emergencyPassed:0,emergencyFailed:0,pedestrians:0,collisions:0,jams:0,maxFlow:1,averageWait:0,totalWait:0,longestWait:0,longestQueue:0,rushHours:0,eventsCompleted:0,nights:0,cleanShifts:0};
     this.level=mode==='story'?STORY[shift]:null; this.duration=this.level?.duration??(mode==='rush'?B.rushDuration:Infinity);
     if(this.level?.objectives?.some(o=>o.stat==='pedestrians'))this.waitingPeople[1]=3;
+    // Rush Hour rewards clearing every approach between collisions.
+    this.circuit = mode === 'rush' ? new Set() : null;
+    this.stats.circuits = 0;
     this.forcedQueue=[];
     if (this.tutorial===0) this.spawn(0,'car',0);
   }
@@ -155,6 +158,15 @@ export class Simulation {
     if(def.emergencyPriority&&timely)this.stats.emergencyPassed++;
     this.stats.totalWait+=v.wait; this.stats.averageWait=this.stats.totalWait/this.stats.passed;
     this.stats.maxFlow=Math.max(this.flow,this.stats.maxFlow);
+    if (this.circuit) {
+      this.circuit.add(v.direction);
+      if (this.circuit.size === this.directions.length) {
+        this.circuit.clear();
+        this.stats.circuits++;
+        this.stats.score += B.circuitBonus;
+        this.emit('circuitComplete');
+      }
+    }
     this.emit('vehiclePassed',v);
     if(this.flow>=4)this.emit('highFlow',{flow:this.flow});
   }
@@ -190,6 +202,7 @@ export class Simulation {
 
   crash(a,b) {
     if(this.invulnerable)return;
+    this.circuit?.clear();
     a.crashLeft=B.wreckTime;a.speed=0;a.state='Crashed';
     if(b){b.crashLeft=B.wreckTime;b.speed=0;b.state='Crashed';}
     this.stats.collisions++;this.flow=Math.max(1,this.flow-.85);this.stats.score=Math.max(0,this.stats.score-B.collisionPenalty);

@@ -3,7 +3,7 @@ import { clamp, medalFor } from './systems.js';
 export const SAVE_KEY='traffino.save.v2';
 const SAVE_VERSION = 3;
 export function futureSave(raw) {try{return (typeof raw==='string'?JSON.parse(raw):raw)?.version>SAVE_VERSION;}catch{return false;}}
-const integer=(v, fallback=0)=>Number.isFinite(v)?clamp(Math.floor(v),0,1e12):fallback;
+const integer=(v, max=1e12)=>Number.isFinite(v)?clamp(Math.floor(v),0,max):0;
 const statistic=v=>Number.isFinite(v)?clamp(v,0,1e12):0;
 export function freshSave() {
   return {version:SAVE_VERSION,career:{ served:0, learned:[], certified:[] },updatedAt:0,revision:0,reputation:0,coins:0,story:Array(8).fill(0),collection:{},best:{endless:0,rush:0,hardcore:0,story:0},totals:{},missions:{},daily:{date:'',progress:{},claimed:[]},session:{progress:{},claimed:[]},cosmetics:['classic'],selectedCosmetic:'classic',map:'garden',settings:{master:.65,music:.35,sfx:.7,language:'',shake:true,haptics:false,quality:'medium'},runs:0,adRewardRun:0};
@@ -14,7 +14,8 @@ export function parseSave(raw) {
     if(!x||typeof x!=='object'||Array.isArray(x))return null;
     if(![1, 2, SAVE_VERSION].includes(x.version))return null;
     const s=freshSave();
-    for(const k of ['updatedAt','revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
+    s.updatedAt=integer(x.updatedAt,Number.MAX_SAFE_INTEGER);
+    for(const k of ['revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
     s.story=s.story.map((_,i)=>clamp(integer(x.story?.[i]),0,3));
     for(const k of Object.keys(s.best))s.best[k]=integer(x.best?.[k]);
     for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits','promptPasses'])s.totals[k]=statistic(x.totals?.[k]);
@@ -75,7 +76,7 @@ export class Progress {
   }
   save() {
     if(this.readOnly)return false;
-    const s=this.data;s.revision++;s.updatedAt=this.now();const text=JSON.stringify(s);
+    const s=this.data;s.revision++;s.updatedAt=Math.max(s.updatedAt,this.now());const text=JSON.stringify(s);
     try {const old=this.storage?.getItem(SAVE_KEY);if(parseSave(old))this.storage?.setItem(SAVE_KEY+'.backup',old);}catch{} // A full backup quota must not prevent replacing the primary save.
     try {this.storage?.setItem(SAVE_KEY,text);}catch{this.warn('saveUnavailable');}
     this.cloud(text);return true;

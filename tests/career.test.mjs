@@ -19,6 +19,26 @@ test('old profiles keep earnings and receive service credit exactly once', () =>
   assert.deepEqual(parseSave({ ...freshSave(), career: malformed }).career, { served: 0, learned: ['ledger', 'dividend'], certified: [] });
 });
 
+test('migration chooses the most recent real timestamp over an older high-revision backup', () => {
+  const time = Date.UTC(2026, 10, 21);
+  const old = { ...freshSave(), version:2, updatedAt:time, revision:98, coins:2 };
+  const recent = { ...old, updatedAt:time+1, revision:1, coins:149, totals:{passed:45} };
+  for (const [primary,backup] of [[recent,old], [old,recent]]) {
+    const storage = { getItem: key => JSON.stringify(key === SAVE_KEY ? primary : backup) };
+    const p = new Progress({storage});
+    assert.equal(p.data.updatedAt, time+1);
+    assert.equal(p.data.coins, 149);
+    assert.equal(p.data.career.served, 45);
+  }
+  const values = new Map([[SAVE_KEY, JSON.stringify(recent)]]);
+  const storage = {getItem:k=>values.get(k), setItem:(k,v)=>values.set(k,v)};
+  const p = new Progress({storage, now:()=>time-1000});
+  assert.ok(p.learn('ledger'));
+  const restored = new Progress({storage});
+  assert.ok(restored.hasSkill('ledger'));
+  assert.equal(restored.data.coins, 101);
+});
+
 test('eight ordinary story shifts can fund both voluntary promotions, with no duplicate pay', () => {
   const data = new Map();
   const storage = { getItem: k => data.get(k), setItem: (k,v) => data.set(k,v) };

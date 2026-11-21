@@ -62,6 +62,7 @@ class App {
   show(screen) {
     if(['brief','progress','postView'].includes(screen))this.ui?.toastElement.classList.remove('show');
     this.screen=screen;this.pause.set('screen',screen!=='gameplay');this.syncActivity();this.ui?.render();this.view?.resize();
+    if(screen==='gameplay')this.ui?.updateHUD();
   }
   externalPause(reason,active) {
     this.pause.set(reason,active);

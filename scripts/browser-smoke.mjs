@@ -46,7 +46,8 @@ try {
     check('Miro portrait in packaged briefing',await evaluate('document.querySelector(".mentor-print img").currentSrc.startsWith("traffino://game/")'));
     await shot('windows-mentor'); await click('[data-action="startStory"]');
     await wait('document.querySelector("#road-0")');
-    await click('#road-1');
+    check('first frame includes the mentor and road state',await evaluate('document.querySelector("#road-1").getAttribute("aria-pressed")==="false"&&document.querySelector("#mentor strong").textContent==="Открой северную дорогу."'));
+    await click('#road-1');await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     check('first lesson waits for the correct road',await evaluate('document.querySelector("#road-1").getAttribute("aria-pressed")==="false"'));
     await click('#road-0'); await wait('document.querySelector("#road-0").getAttribute("aria-pressed")==="true"');
     await wait('Number(document.querySelector("#hud-score").dataset.score)>0');
@@ -58,10 +59,11 @@ try {
     await cdp('Page.reload'); await wait('document.querySelector(".hero")');
     check('progress survives reload', await evaluate(`JSON.parse(localStorage.getItem('${SAVE_KEY}')).runs===1`));
     // Upgrade an older playtest profile through the packaged UI in this disposable browser profile.
-    const legacy={...freshSave(),version:2,coins:149,story:[2,0,0,0,0,0,0,0],totals:{passed:45},updatedAt:Date.now()+1000};
+    const legacy={...freshSave(),version:2,coins:149,story:[2,0,0,0,0,0,0,0],totals:{passed:45},updatedAt:Date.now()};
     legacy.settings.language='ru';
+    const previousBoot=await evaluate('performance.timeOrigin');
     await evaluate(`localStorage.setItem(${JSON.stringify(SAVE_KEY)},${JSON.stringify(JSON.stringify(legacy))})`);
-    await cdp('Page.reload');await wait('document.querySelector(".hero")');await click('[data-action="progress"]');
+    await cdp('Page.reload');await wait(`performance.timeOrigin>${previousBoot}&&document.querySelector(".hero")`);await click('[data-action="progress"]');
     await click('[data-action="learn"][data-value="ledger"]');await click('[data-action="learn"][data-value="dividend"]');
     await click('[data-action="review"][data-value="ledger"]');
     check('review quotes balance and next rate',await evaluate('document.querySelector(".promotion-terms").textContent.includes("◈ 5 → 0")&&document.querySelector(".promotion-terms").textContent.includes("◈ 4")'));

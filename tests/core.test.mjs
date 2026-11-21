@@ -87,7 +87,7 @@ test('pause reasons compose; clearing an ad never clears a manual pause',()=>{
   const q=new InputCommands(),g=isolated();for(let i=0;i<1000;i++)q.push('toggle',0);assert.equal(q.queue.length,16);q.drain(g);assert.equal(g.signals[0],false);
 });
 test('versioned saves validate, migrate, recover and do not overwrite future data',()=>{
-  const storage=memory(),s=freshSave();s.coins=120;s.version=1;assert.equal(parseSave(JSON.stringify(s)).version,2);
+  const storage=memory(),s=freshSave();s.coins=120;s.version=1;assert.equal(parseSave(JSON.stringify(s)).version,freshSave().version);
   assert.equal(parseSave('{bad'),null);assert.equal(parseSave({version:30}),null);assert.equal(parseSave({...s,coins:-12}).coins,0);
   storage.setItem(SAVE_KEY,'broken');storage.setItem(SAVE_KEY+'.backup',JSON.stringify(s));const p=new Progress({storage});assert.equal(p.data.coins,120);p.save();assert.equal(parseSave(storage.getItem(SAVE_KEY)).coins,120);
   storage.setItem(SAVE_KEY,JSON.stringify({version:30}));const future=new Progress({storage});assert.equal(future.save(),false);assert.equal(JSON.parse(storage.getItem(SAVE_KEY)).version,30);

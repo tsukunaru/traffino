@@ -45,6 +45,13 @@ export const STORY = [
   { seed: 1003, duration: 120, density: .55, goal: 15, objectives: [{stat:'emergencyPassed',target:1},{stat:'pedestrians',target:3},{stat:'eventsCompleted',target:1}], turns: true, tier: 3, pedestrians: true, events: true, medals: [1200, 1900], wait: [26, 17], flow: [2, 2.7] },
 ];
 export const EVENTS = ['broken', 'works', 'turn', 'surge', 'wave', 'delivery'];
+export const TRAINING = [
+  { id: 'board', cost: 48 },
+  { id: 'radio', cost: 96, requires: 'board' },
+  { id: 'ledger', cost: 48 },
+  { id: 'dividend', cost: 96, requires: 'ledger' },
+];
+export const SERVICE = { promotionTargets: [45, 90], radioSeconds: 6, premium: 2, premiumFlow: 2 };
 export const RANKS = [0, 150, 420, 900, 1700, 3000];
 export const COSMETICS = [{ id: 'classic', cost: 0, color: 0x3a736a }, { id: 'coral', cost: 120, color: 0xce705b }, { id: 'indigo', cost: 240, color: 0x77789c }];
 export const MISSIONS = [

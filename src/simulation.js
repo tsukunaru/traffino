@@ -1,11 +1,12 @@
-import { BALANCE as B, VEHICLES, STORY, INTERSECTIONS, EVENTS } from './config.js';
+import { BALANCE as B, VEHICLES, STORY, INTERSECTIONS, EVENTS, SERVICE } from './config.js';
 import { makeRoutes, conflictMatrix, sample, overlaps, rotate } from './routes.js';
 import { random, difficulty, flowAfter, passScore, clamp, storyGoalMet } from './systems.js';
 
 export class Simulation {
-  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true } = {}) {
+  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, radio=false } = {}) {
     seed ??= mode==='story'?(STORY[shift].seed??1000+shift):Date.now();
     this.mode=mode; this.shift=shift; this.map=map; this.emit=emit; this.rng=random(seed); this.seed=seed;
+    this.emergencyLimit = B.emergencyTimer + (radio ? SERVICE.radioSeconds : 0);
     this.routes=makeRoutes(map); this.conflicts=conflictMatrix(this.routes);
     this.directions=map.directions??[0,1,2,3];this.routesByDirection=this.directions.map(d=>this.routes.filter(r=>r.direction===d));
     this.vehicles=Array.from({length:B.capacity}, (_,id)=>({ id, active:false, x:0,z:0,dx:0,dz:1 }));
@@ -24,6 +25,7 @@ export class Simulation {
     // Rush Hour rewards clearing every approach between collisions.
     this.circuit = mode === 'rush' ? new Set() : null;
     this.stats.circuits = 0;
+    this.stats.promptPasses = 0;
     this.forcedQueue=[];
     if (this.tutorial===0) this.spawn(0,'car',0);
   }
@@ -31,6 +33,7 @@ export class Simulation {
   command({type,direction}) {
     if (!this.running || !Number.isInteger(direction) || !this.directions.includes(direction)) return;
     if(type==='toggle') {
+      if(this.tutorial===2 && direction!==1) return;
       if(this.tutorial<2 && direction!==0) return;
       if(this.tutorial===1 && this.stats.passed===0 && this.signals[0]) return;
       this.signals[direction]=!this.signals[direction];
@@ -54,7 +57,7 @@ export class Simulation {
     if(this.event?.phase==='active'&&this.event.kind==='turn'&&this.event.direction===direction&&turn===1)turn=0;
     const choices=this.routesByDirection[this.directions.indexOf(direction)];
     const route=choices.find(r=>r.turn===turn)??choices[0];if(!route)return null;turn=route.turn;
-    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:B.emergencyTimer,emergencyFailed:false,crashLeft:0,broken:0});
+    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:this.emergencyLimit,emergencyFailed:false,crashLeft:0,broken:0});
     sample(route,0,v); this.emit('vehicleSpawned',v);
     if(def.emergencyPriority)this.emit('emergency',v);
     if(def.reckless)this.emit('reckless',v);
@@ -154,6 +157,7 @@ export class Simulation {
     const def=VEHICLES[v.kind], timely=def.emergencyPriority?!v.emergencyFailed:v.wait<(def.scheduleTolerance??B.timelyWait);
     this.flow=flowAfter(this.flow,v.wait,timely&&(def.bus||def.emergencyPriority));
     this.stats.score+=passScore(def,this.flow,timely,this.mode);
+    if (v.wait < B.timelyWait && this.flow >= SERVICE.premiumFlow) this.stats.promptPasses++;
     this.stats.passed++; if(def.bus)this.stats.buses++; else this.stats.cars++;
     if(def.emergencyPriority&&timely)this.stats.emergencyPassed++;
     this.stats.totalWait+=v.wait; this.stats.averageWait=this.stats.totalWait/this.stats.passed;

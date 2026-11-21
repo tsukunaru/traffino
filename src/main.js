@@ -77,7 +77,7 @@ class App {
     if(mode==='story'&&(shift<0||shift>7||(shift>0&&!this.progress.data.story[shift-1])))return;
     this.runStart={rank:this.progress.rank,story:[...this.progress.data.story],collection:Object.keys(this.progress.data.collection),reputation:this.progress.data.reputation};this.unlocks=[];
     this.progress.start();this.shift=shift;this.isBest=false;this.oldBest=this.progress.data.best[mode];this.autoResume=false;
-    this.game=new Simulation({mode,shift,map:this.map(),emit:(name,data)=>this.event(name,data)});
+    this.game=new Simulation({mode,shift,map:this.map(),radio:this.progress.hasSkill('radio'),emit:(name,data)=>this.event(name,data)});
     this.view.setMap(this.map());this.view.bind(this.game);this.view.baseAngle=0;this.view.zoom=1;this.input.clear();this.show('gameplay');
     if([...this.pause.reasons].some(r=>r!=='screen'))this.show('paused');
     this.audio.unlock();

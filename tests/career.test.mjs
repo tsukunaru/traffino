@@ -124,4 +124,3 @@ test('dispatch equipment changes deadlines and awards premiums only on qualifyin
   assert.ok(p.hasSkill('ledger'));
   assert.equal(p.hasSkill('dividend'), false);
 });
-

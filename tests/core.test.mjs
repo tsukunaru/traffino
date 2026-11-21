@@ -69,7 +69,12 @@ test('emergencies award success and timeout exactly once',()=>{
   const fail=isolated();fail.spawn(0,'ambulance',0);run(fail,35);assert.equal(fail.stats.emergencyFailed,1);assert.equal(fail.stats.emergencyPassed,0);
 });
 test('pedestrians are pooled and share collision responsibility',()=>{
-  const g=isolated();g.waitingPeople[0]=4;g.cross(0);assert.equal(g.waitingPeople[0],0);run(g,9);assert.equal(g.stats.pedestrians,4);assert.equal(g.people.filter(p=>p.active).length,0);
+  const g=isolated();g.waitingPeople[0]=4;g.cross(0);assert.equal(g.waitingPeople[0],0);
+  const walkers=g.people.filter(p=>p.active);
+  assert.deepEqual(walkers.map(p=>p.appearance),[0,1,2,3]);
+  assert.equal(new Set(walkers.map(p=>p.x+','+p.z)).size,4);
+  g.tick();assert.equal(walkers[3].x,walkers[3].fromX);assert.equal(g.pedestrianHead[0],4);
+  run(g,9);assert.equal(g.stats.pedestrians,4);assert.equal(g.people.filter(p=>p.active).length,0);
   const bad=isolated();const p=bad.people[0];Object.assign(p,{active:true,x:0,z:0});const v=bad.spawn(0,'car',0);Object.assign(v,{x:0,z:0,speed:3});bad.collisions();assert.equal(bad.reason,'pedestrian');
 });
 test('events warn, activate, finish; termination does not tick events again',()=>{

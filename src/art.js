@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { VEHICLES } from './config.js';
 
-export const PALETTE={cream:0xffe7b0,stone:0xe8cfa4,road:0x80696b,ink:0x333c50,glass:0x476674,coral:0xde7058,mint:0x72b8ac,yellow:0xebbc55,lime:0xb8bd67,plum:0x785463,white:0xfff3d2};
+export const PALETTE={cream:0xffe7b0,stone:0xe8cfa4,road:0x656974,ink:0x333c50,glass:0x476674,coral:0xde7058,mint:0x72b8ac,yellow:0xebbc55,lime:0xb8bd67,plum:0x785463,white:0xfff3d2};
 // Eight keyframes, with the final midnight repeating the first for a seamless day.
+export const OFFICER_POST={x:5.65,z:5.70};
 export const SKY=[
   [0,0x252d53,0x77779c,0x99bcff,.65], [.18,0x586589,0xcaa398,0xf8bb8d,.85],
   [.25,0xd9cab0,0xffedcf,0xffd396,2.4], [.42,0xafd6dd,0xffecd1,0xffefc9,3.0],
@@ -36,14 +37,27 @@ export function vehicleParts(kind) {
     if(kind==='firetruck'){for(const x of [-.39,.39])part(x,1.9,-.32,.10,.12,l*.56,PALETTE.cream);for(let i=0;i<7;i++)part(0,1.9,-l*.32+i*.27,.86,.08,.07,PALETTE.cream);}
     if(kind==='garbage')part(0,1.05,-l*.49,w*.7,.65,.14,PALETTE.ink);
   }else{
-    part(0,1.0,-l*.06,w*.88,.6,l*.52,c);part(0,1.31,-l*.08,w*.89,.14,l*.48,c);
-    part(0,1.05,l*.209,w*.75,.38,.045,PALETTE.glass);part(0,1.04,-l*.333,w*.75,.36,.045,PALETTE.glass);
-    for(const side of [-1,1])for(const z of [-.19,.08])part(side*w*.45,1.07,z*l,.04,.34,l*.21,PALETTE.glass);
+    part(0,1.035,-l*.055,w*.89,.59,l*.59,0x426575);p[p.length-1].shape='cab';
+    part(0,1.344,-l*.061,w*.83,.082,l*.345,c);
+    for(const side of [-1,1]){
+      part(side*w*.439,1.028,-l*.047,.05,.48,.087,c);
+      part(side*w*.44,.817,-l*.057,.05,.055,l*.53,c);
+    }
+    part(0,.852,l*.32,w*.76,.059,l*.275,c);
+    part(0,.836,-l*.39,w*.8,.056,l*.16,c);
     if(kind==='taxi'){part(0,1.49,0,.56,.22,.3,PALETTE.cream);part(0,1.51,.16,.33,.08,.025,PALETTE.ink);}
     if(kind==='police'){for(const side of [-1,1])part(side*w*.501,.61,0,.035,.20,l*.74,PALETTE.white);}
     if(kind==='pizza'){part(0,1.49,-.15,.75,.22,.66,0xf6c45b);part(0,1.61,-.15,.44,.04,.41,0xd2644e);}
     if(kind==='reckless'){part(0,1.1,-l*.44,w*1.04,.11,.29,PALETTE.ink);part(0,.86,l*.32,.19,.03,l*.28,PALETTE.cream);}
   }
+  for(const side of [-1,1]){
+    part(side*w*.52,big?1.22:1.07,l*(big?.32:.18),.19,.12,.18,c);
+    part(side*w*.54,big?1.22:1.07,l*(big?.32:.18)-.055,.15,.08,.083,0xa9cbca);
+    part(side*w*.505,.78,l*.01,.028,.039,l*.66,PALETTE.cream);
+    part(side*w*.466,big?1.03:.94,l*.08,.038,.043,.14,PALETTE.ink);
+  }
+  part(0,.58,l*.482,w*.38,.12,.041,PALETTE.ink);
+  part(0,.447,-l*.492,w*.26,.095,.025,PALETTE.cream);
   part(0,.46,l*.48,w*.88,.16,.14,PALETTE.cream);part(0,.44,-l*.48,w*.83,.13,.12,PALETTE.ink);
   for(const side of [-1,1]){part(side*w*.31,.69,l*.48,.26,.20,.045,0xffebb4,'headlight');part(side*w*.33,.69,-l*.482,.24,.17,.045,0xb54f4b,'brake');part(side*w*.43,.74,l*.44,.12,.12,.08,0xe5a454,'indicator');}
   if(v.emergencyPriority)for(const side of [-1,1])part(side*.25,big?1.89:1.48,big?l*.24:0,.32,.20,.27,side<0?0xf57e65:0x83c9ff,'siren');
@@ -69,7 +83,25 @@ function building(v,parent,x,z,w,h,d,color,shop='',tower=false) {
       if(row===0&&col===0&&!shop){box(xx-.1,.76,front+.15,ww*.8,1.5,.16,0x64505a);box(xx+.2,.72,front+.27,.07,.1,.04,PALETTE.cream);}
     }
     for(const side of [-1,1]){const win=box(side*(w/2+.04),y,0,.13,1.35,d*.46,PALETTE.plum);win.material=v.windowMaterial;box(side*(w/2+.08),y-.76,0,.3,.12,d*.51,PALETTE.cream);}
+    for(const xx of [-w*.245,w*.245]){
+      const rear=-d*.5;
+      box(xx,y,rear-.07,w*.25+.18,1.48,.12,PALETTE.cream);
+      box(xx,y,rear-.15,w*.24,1.24,.07,PALETTE.glass).material=v.quietWindowMaterial;
+      box(xx,y+.13,rear-.21,w*.24,.06,.04,PALETTE.stone);
+      box(xx,y-.77,rear-.14,w*.28,.13,.26,PALETTE.stone);
+    }
     if(row%2===0&&!tower){box(w*.23,y-.84,front+.34,.92,.56,.54,PALETTE.white);v.mesh(g,'cylinder',w*.23,y-.84,front+.64,.35,.055,.35,0x897577,Math.PI/2);}
+  }
+  // Plinths, drainpipes and recessed windows continue around the side elevations.
+  for(const side of [-1,1]){
+    const sx=side*(w/2+.13);
+    v.mesh(g,'cylinder',sx,h*.49,-d*.41,.12,h*.95,.12,0x71918b);
+    for(let y=1.2;y<h;y+=2.5){
+      box(sx,y,-d*.41,.18,.115,.20,PALETTE.cream);
+      box(sx,y+.42,0,.12,1.2,.09,PALETTE.cream);
+      box(sx,y+.58,0,.13,.08,d*.44,PALETTE.cream);
+    }
+    for(let y=.7;y<h-.5;y+=1.28)box(side*(w*.5-.12),y,front-.04,.40,.26,.20,PALETTE.stone);
   }
   // Glazed rooflights and narrow brass mullions catch the afternoon light.
   if(w>=6 && !shop) {
@@ -79,8 +111,17 @@ function building(v,parent,x,z,w,h,d,color,shop='',tower=false) {
   }
   box(w*.25,h+1.0,-d*.18,.98,1.3,1.05,color);box(w*.25,h+1.68,-d*.18,1.18,.14,1.21,PALETTE.cream);
   box(-w*.25,h+.48,-d*.16,1.18,.45,.82,0xb0b9ac);
+  for(let vent=0;vent<5;vent++)box(-w*.25-.43+vent*.21,h+.72,-d*.16,.068,.055,.65,PALETTE.glass);
+  box(w*.25,h+1.79,-d*.18,.63,.10,.65,PALETTE.ink);
   if(tower){v.mesh(g,'cylinder',-w*.22,h+1.08,d*.20,.07,1.2,.07,PALETTE.cream);const dish=v.mesh(g,'sphere',-w*.22,h+1.57,d*.20,.75,.17,.75,PALETTE.white);dish.rotation.z=.7;}
   if(shop){
+    for(const side of [-1,1]){
+      const edge=side*(w*.5+.075);
+      box(edge,1.51,d*.1,.19,1.97,d*.54,PALETTE.cream);
+      box(edge+side*.1,1.52,d*.1,.09,1.75,d*.49,PALETTE.glass);
+      for(let k=-1;k<=1;k++)box(edge+side*.16,1.52,d*(.10+k*.15),.08,1.76,.085,PALETTE.cream);
+      for(let k=0;k<6;k++)box(edge+side*.43,2.63,d*(-.16+k*.105),.95,.17,d*.105,k%2?PALETTE.cream:color).rotation.z=-side*.16;
+    }
     box(0,1.36,front+.14,w*.86,2.06,.2,PALETTE.cream);const glass=box(0,1.36,front+.26,w*.81,1.86,.07,0x54899a);glass.material=v.shopWindowMaterial;for(let i=-1;i<=1;i++)box(i*w*.255,1.4,front+.32,.1,1.9,.08,PALETTE.cream);
     box(-w*.07,1.21,front+.39,.07,.44,.07,PALETTE.cream);box(w*.065,1.21,front+.39,.07,.44,.07,PALETTE.cream);
     for(const side of [-1,1]){box(side*w*.47,.37,front+.5,.5,.59,.5,0xc38a60);v.mesh(g,'sphere',side*w*.47,.91,front+.5,.69,.87,.64,0x8fac6b);}
@@ -275,6 +316,15 @@ export function buildCity(v) {
     }
     v.box(q,-map.lane,.21,-map.entry-1.6,map.width/2-.35,.024,.26,P.white);
     for(let x=-map.width/2+.3;x<map.width/2;x+=.82)v.box(q,x,.21,-map.entry-.8,.46,.026,1.09,P.white);
+    // Slab joints, cast drains and a bolted inspection cover sit clear of the crossing.
+    for(let z=-e+2;z<-map.entry-2;z+=2.2){
+      for(const side of [-1,1])v.box(q,side*(map.width/2+1.55),.328,z,1.94,.012,.026,0xd3bfa4);
+    }
+    v.mesh(q,'cylinder',1.06,.207,-18,.92,.024,.92,0x56565b);
+    for(const off of [-.22,0,.22])v.box(q,1.06,.225,-18+off,.63,.012,.043,0x838086);
+    const drainX=map.width/2-.28;
+    v.box(q,drainX,.215,-13,.39,.021,1.04,0x49494e);
+    for(let j=0;j<5;j++)v.box(q,drainX,.232,-13.38+j*.19,.33,.02,.061,0x97928b);
     for(const z of [-11,-21]){
       v.mesh(q,'cylinder',-map.width/2-1.4,2.3,z,.17,4.4,.17,P.ink);v.box(q,-map.width/2-1.02,4.49,z,.95,.17,.17,P.ink);
       const lamp=v.box(q,-map.width/2-.68,4.31,z,.62,.25,.59,P.cream);lamp.material=v.lampMaterial;
@@ -293,7 +343,14 @@ export function buildCity(v) {
         continue;
       }
       v.mesh(q,'cylinder',x,1.35,z,.26,1.7,.26,0x9c7756);
-      for(const [dx,dy,dz,r] of [[0,2.5,0,1.2],[-.65,2.18,.2,.77],[.6,2.45,-.1,.8]])v.mesh(q,'sphere',x+dx,dy,z+dz,r*1.6,r*1.65,r*1.6,i?0x9ab578:0x80a778);
+      const tall=(i+d)%3===0;
+      for(let branch=0;branch<6;branch++){
+        const phase=branch*2.4+d, reach=tall?.38:.72, lift=branch*.135;
+        const xx=Math.cos(phase)*reach, zz=Math.sin(phase)*reach;
+        if(branch<3)v.mesh(q,'cylinder',x+xx*.33,1.86+lift,z+zz*.33,.13,.91,.13,0x886e51).rotation.z=-xx*.77;
+        v.mesh(q,'sphere',x+xx,2.28+lift,z+zz,tall?1.03:1.53,tall?1.54:1.42,tall?1.07:1.48,[0x568873,0x78a577,0x91ae70,0x70a486,0x9bb773,0x83b18a][branch]);
+      }
+      v.mesh(q,'sphere',x,tall?3.27:3.02,z,1.30,tall?1.68:1.14,1.30,0xa4bf7c);
     }
     v.box(q,-10.8,.76,-7.25,2,.2,.66,0xbe8562);v.box(q,-10.8,1.07,-7.57,2,.51,.16,0xbe8562);
     for(const x of [-11.5,-10.1])v.box(q,x,.47,-7.25,.12,.5,.65,P.ink);
@@ -302,6 +359,10 @@ export function buildCity(v) {
     v.box(q,-8.7,.52,-19.5,.55,.52,.5,0xdcb585);v.box(q,-8.7,.80,-19.5,.12,.025,.5,P.cream);
     for(let i=0;i<3;i++)v.mesh(q,'sphere',-12.5+i*.42,.63,-7.25,.32,.45,.32,i%2?0xdd957c:0xebc569);
   }
+  const post=OFFICER_POST;
+  v.mesh(g,'cylinder',post.x,.128,post.z,1.76,.18,1.76,P.stone);
+  v.mesh(g,'cylinder',post.x,.24,post.z,1.58,.10,1.58,P.glass);
+  v.mesh(g,'cylinder',post.x,.297,post.z,1.57,.075,1.57,P.cream);
   dutyStation(v,g);
   if(map.id==='harbor')building(v,g,-16,-18,7,6.2,6.2,P.glass,'DOCK');
   else {
@@ -340,7 +401,13 @@ export function buildCity(v) {
   for(const x of [-21,-19]){
     v.mesh(g,'cylinder',x,1.53,12,.12,2.6,.12,P.ink);
     v.mesh(g,'sphere',x,2.82,12,2.2,.57,2.2,x===-21?P.coral:P.yellow);
-    for(const offset of [-.85,.85])v.box(g,x,.65,12+offset,.54,.83,.56,P.mint);
+    for(const offset of [-.88,.88]){
+      v.box(g,x,.62,12+offset,.58,.14,.54,P.mint);
+      v.box(g,x,.93,12+offset*1.23,.58,.53,.13,P.mint);
+      for(const sx of [-.20,.20])for(const sz of [-.17,.17])v.box(g,x+sx,.38,12+offset+sz,.067,.42,.067,P.ink);
+    }
+    v.mesh(g,'cylinder',x+.28,1.34,12,.19,.19,.19,P.white);
+    v.box(g,x-.22,1.28,12,.29,.035,.41,P.coral);
   }
   // The supplied street-prop sheet informs this small bus shelter; keep it off the road.
   for(const z of [-14.8,-10.8])v.box(g,7.5,1.55,z,.15,2.6,.15,P.mint);

@@ -138,5 +138,45 @@ Object.assign(strings.en, {
   returnDesk: "Return to equipment",
   tourHint: "Duty station",
 });
+Object.assign(strings.ru, {
+  "menuInvite": "Город ждёт зелёного.",
+  "you": "Ты",
+  "yourReply": "Твой ответ",
+  "askNorth": "Как выпустить первую машину?",
+  "askHazard": "За чем следить сегодня?",
+  "askDuty": "Какая у меня задача?",
+  "northAnswer": "Нажми «Север» или W. Когда машина выедет с перекрёстка, нажми ещё раз. Только потом дай зелёный соседней дороге.",
+  "wageAnswer": "Твоя ставка за каждый проезд — {n} ◈.",
+  "readyNorth": "Понял. Дам северу зелёный.",
+  "readyDuty": "Принимаю смену.",
+  "greet1": "Слышишь звонок у кафе? Начались доставки. Теперь водители ещё и поворачивают.",
+  "greet2": "Утренние автобусы в пути. Сегодня очередь может вытянуться до самого рынка.",
+  "greet3": "Вон тот автобус везёт целый класс. Ему понадобится чуть больше места.",
+  "greet4": "Мне звонили со станции скорой помощи. Экипажу потребуется наш перекрёсток.",
+  "greet5": "Сегодня ярмарка. Видишь людей у зебры? Они тоже ждут твоего сигнала.",
+  "greet6": "Диспетчер на связи. Где-то по пути затеяли дорожные работы.",
+  "greet7": "Ну вот, город уже знает тебя в лицо. Возьмёшь большую смену?"
+});
+Object.assign(strings.en, {
+  "menuInvite": "Give the city a green light.",
+  "you": "You",
+  "yourReply": "Your reply",
+  "askNorth": "How do I let the first car through?",
+  "askHazard": "What should I watch for today?",
+  "askDuty": "What’s my assignment?",
+  "northAnswer": "Press North or W. Once the car has cleared the crossing, press it again. Then you can open the next road.",
+  "wageAnswer": "Your current pay is {n} coins per vehicle.",
+  "readyNorth": "Got it. Green for north.",
+  "readyDuty": "I’ll take the shift.",
+  "greet1": "Hear the café bell? Deliveries have started. Watch for drivers turning today.",
+  "greet2": "The morning buses are out. Queues can reach all the way to the market.",
+  "greet3": "That bus has a whole class on board. Give it room to finish turning.",
+  "greet4": "The ambulance station just called. A crew needs our crossing.",
+  "greet5": "It’s market day. The people by the zebra crossing need a signal too.",
+  "greet6": "Dispatch is on the radio. Roadworks have started nearby.",
+  "greet7": "The city knows your face by now. Ready to run a full shift?"
+});
+Object.assign(strings.ru,{photoSubject:'В кадре',officer:'Регулировщик',street:'Прохожие'});
+Object.assign(strings.en,{photoSubject:'Subject',officer:'Traffic officer',street:'Residents'});
 export function translator(lang) {return key=>strings[lang]?.[key]??strings.en[key]??key;}
 

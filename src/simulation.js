@@ -15,7 +15,7 @@ export class Simulation {
     this.dangerStates=[false,false,false,false];this.dangerClock=0;
     this.queues=Array.from({length:4},()=>({count:0,length:0,average:0,longest:0,jam:0}));
     this.lanes=Array.from({length:4},()=>[]); this.grid=Array.from({length:144},()=>[]);
-    this.waitingPeople=[0,0,0,0]; this.pedClock=8; this.eventClock=B.eventInterval;
+    this.waitingPeople=[0,0,0,0];this.pedestrianHead=[0,0,0,0]; this.pedClock=8; this.eventClock=B.eventInterval;
     this.time=0; this.elapsed=0; this.day=1; this.timeOfDay=.22; this.flow=1; this.running=true; this.director=director;
     this.trafficProfile={};this.spawnClock=1; this.serial=0; this.event=null; this.tutorial=mode==='story'&&shift===0 ? 0 : 4;
     this.densityScale=1; this.invulnerable=false; this.guaranteed=false;
@@ -214,21 +214,27 @@ export class Simulation {
     if(!b||this.mode==='hardcore'||this.stats.collisions>=3)this.end(!b?'pedestrian':'collision');
   }
 
+  queuePoint(direction,index,out) {
+    return rotate(-4.7-(index%2)*.52,-this.map.entry-.8-Math.floor(index/2)*.55,direction,out);
+  }
   cross(direction) {
     if(this.people.some(p=>p.active&&p.direction===direction))return;
     const count=Math.min(this.waitingPeople[direction],8);let started=0;
     for(let i=0;i<count;i++) {
       const p=this.people.find(p=>!p.active);if(!p)break;
-      Object.assign(p,{active:true,direction,t:-i*.12,speed:.16+this.rng()*.02});started++;
-      const pos=rotate(-4,-this.map.entry-.8,direction);p.x=pos.x;p.z=pos.z;
+      this.queuePoint(direction,i,p);
+      Object.assign(p,{active:true,direction,appearance:direction*8+this.pedestrianHead[direction]+i,fromX:p.x,fromZ:p.z,t:-i*.12,speed:.16+this.rng()*.02});started++;
     }
-    this.waitingPeople[direction]-=started;
+    this.waitingPeople[direction]-=started;this.pedestrianHead[direction]+=started;
     if(started)this.emit('pedestriansStarted',{direction,count:started});
   }
 
   updatePeople(dt) {
     for(const p of this.people)if(p.active) {
-      p.t+=dt*p.speed;rotate(-4+8*clamp(p.t,0,1),-this.map.entry-.8,p.direction,p);
+      p.t+=dt*p.speed;
+      const t=clamp(p.t,0,1),join=Math.min(1,t*4);
+      rotate(-4.7+9.4*t,-this.map.entry-.8,p.direction,p);
+      p.x=(p.fromX??p.x)*(1-join)+p.x*join;p.z=(p.fromZ??p.z)*(1-join)+p.z*join;
       if(p.t>=1){p.active=false;this.stats.pedestrians++;this.stats.score+=Math.round(B.score.pedestrian*this.flow);this.emit('pedestrianPassed',p);}
     }
   }

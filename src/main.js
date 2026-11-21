@@ -9,6 +9,8 @@ import { AudioSystem } from './audio.js';
 import { UI } from './ui.js';
 import { translator } from './i18n.js';
 import './styles.css';
+import './station.css';
+import './town.css';
 
 class App {
   constructor() {
@@ -34,22 +36,28 @@ class App {
     this.progress.data=selectSave(this.progress.data,parseSave(cloudRaw));this.progress.rollDaily();
     this.language=this.progress.data.settings.language||this.platform.language();
     await loading(45);
-    try {this.view=new CityView(document.querySelector('#world'),this.map());}
-    catch {const t=translator(this.language);document.querySelector('#ui').innerHTML=`<section class="fatal"><h1>Traffino</h1><p>${t('webglError')}</p><button id="reload">${t('reload')}</button></section>`;document.querySelector('#reload').onclick=()=>location.reload();return;}
+    try {this.view=new CityView(document.querySelector('#world'),this.map(),this.progress.data.career);}
+    catch (error) {if(__DEV__)console.error(error);const t=translator(this.language);document.querySelector('#ui').innerHTML=`<section class="fatal"><h1>Traffino</h1><p>${t('webglError')}</p><button id="reload">${t('reload')}</button></section>`;document.querySelector('#reload').onclick=()=>location.reload();return;}
     this.view.onContextLost=()=>this.externalPause('context',true);
     await loading(65);
     this.ui=new UI(this);this.audio.prepare();this.audio.apply(this.progress.data.settings);this.view.quality(this.progress.data.settings.quality);
-    this.demo=new Simulation({map:this.map(),director:false,seed:731,emit:()=>{}});this.demo.signals[0]=this.demo.signals[2]=true;
-    for(let d=0;d<4;d++){const car=this.demo.spawn(d,d===0?'taxi':d===2?'bus':'car',0);if(car)car.s=4+d*3;}
+    this.demo=this.makeDemo();
     this.view.bind(this.demo);this.view.render(this.demo,0,this.viewSettings());
     await loading(85);
-    await Promise.all([...['traffino-logo.png','junior-vehicles.png','junior-shops.png'].map(name=>new Promise(resolve=>{const image=new Image();image.onload=image.onerror=resolve;image.src='./assets/'+name;})),document.fonts?.load('900 24px Nunito').catch(()=>{})]);
+    await Promise.all([...['miro-portrait.jpg','junior-shops.png'].map(name=>new Promise(resolve=>{const image=new Image();image.onload=image.onerror=resolve;image.src='./assets/'+name;})),document.fonts?.load('900 24px Nunito').catch(()=>{})]);
     await loading(100);
     this.show('menu');this.platform.ready();for(const key of notices)this.ui.toast(key);
     if(globalThis.PointerEvent)this.view.canvas.addEventListener('pointerdown',e=>this.canvasInput(e));
     else this.view.canvas.addEventListener('click',e=>this.canvasInput(e));
     this.lastFrame=performance.now();this.lastHUD=0;this.animate=this.frame.bind(this);requestAnimationFrame(this.animate);
     if(__DEV__) {const {installDebug}=await import('./debug.js');installDebug(this);}
+  }
+  makeDemo() {
+    const demo=new Simulation({map:this.map(),director:false,seed:731});
+    demo.elapsed=36;demo.signals[0]=demo.signals[2]=true;this.demoSpawn=-1;
+    ['taxi','van','bus','pizza'].forEach((kind,d)=>{demo.spawn(d,kind,0).s=5+d*3;});
+    demo.tick(B.step);
+    return demo;
   }
   map() {return INTERSECTIONS.find(m=>m.id===this.progress.data.map)??INTERSECTIONS[0];}
   viewSettings() {this.presentation??={};Object.assign(this.presentation,this.progress.data.settings);this.presentation.selectedCosmetic=this.progress.data.selectedCosmetic;return this.presentation;}
@@ -59,7 +67,10 @@ class App {
     if(this.screen==='menu')this.audio.menu();
   }
   show(screen) {
+    if(screen==='brief')this.dialogueTopic=null;
+    if(['brief','progress','postView'].includes(screen))this.ui?.toastElement.classList.remove('show');
     this.screen=screen;this.pause.set('screen',screen!=='gameplay');this.syncActivity();this.ui?.render();this.view?.resize();
+    if(screen==='gameplay')this.ui?.updateHUD();
   }
   externalPause(reason,active) {
     this.pause.set(reason,active);
@@ -77,7 +88,7 @@ class App {
     if(mode==='story'&&(shift<0||shift>7||(shift>0&&!this.progress.data.story[shift-1])))return;
     this.runStart={rank:this.progress.rank,story:[...this.progress.data.story],collection:Object.keys(this.progress.data.collection),reputation:this.progress.data.reputation};this.unlocks=[];
     this.progress.start();this.shift=shift;this.isBest=false;this.oldBest=this.progress.data.best[mode];this.autoResume=false;
-    this.game=new Simulation({mode,shift,map:this.map(),emit:(name,data)=>this.event(name,data)});
+    this.game=new Simulation({mode,shift,map:this.map(),radio:this.progress.hasSkill('radio'),emit:(name,data)=>this.event(name,data)});
     this.view.setMap(this.map());this.view.bind(this.game);this.view.baseAngle=0;this.view.zoom=1;this.input.clear();this.show('gameplay');
     if([...this.pause.reasons].some(r=>r!=='screen'))this.show('paused');
     this.audio.unlock();
@@ -128,10 +139,29 @@ class App {
     else if(name==='rewarded')void this.rewardedCoins();
     else if(name==='fullscreen')void this.platform.fullscreen();
     else if(name==='continue'){this.shift=this.progress.data.story.findIndex(m=>!m);if(this.shift<0)this.shift=7;this.show('brief');}
-    else if(['story','collection','challenges','progress'].includes(name))this.show(name);
+    else if(name==='progress' && ['menu','results'].includes(this.screen)){this.progressBack=this.screen;this.show('progress');}
+    else if(['story','collection','challenges'].includes(name))this.show(name);
+    else if(name==='learn' && this.screen==='progress' && this.progress.learn(value)){
+      this.view.setMap(this.map(),this.progress.data.career);
+      this.audio.event('unlock');this.ui.refreshStation(value);this.ui.toastText(t('installed')+' · '+t('skill_'+value));
+    }
+    else if(name==='review' && this.screen==='progress' && this.progress.canPromote(value)){this.ui.review(value);}
+    else if(name==='confirmPromotion' && this.screen==='progress' && this.ui.root.querySelector('.confirm-overlay [data-action="confirmPromotion"]')?.dataset.value===value && this.progress.promote(value)){
+      this.ui.dismissConfirm();this.view.setMap(this.map(),this.progress.data.career);
+      this.audio.event('reward');this.ui.render();this.ui.toastText(t('certifiedNote')+' · '+t('grade'+this.progress.grade));
+    }
+    else if(name==='postView' && this.screen==='progress'){
+      this.view.inspectPost=true;this.view.zoom=4.8;this.view.baseAngle=-1.26;this.show('postView');this.ui.root.querySelector('button').focus();
+    }
     else if(name==='settings'){this.settingsBack=this.screen==='gameplay'?'paused':this.screen;this.autoResume=false;this.show('settings');}
-    else if(name==='back')this.show(this.screen==='settings'?this.settingsBack??'menu':this.screen==='brief'?'story':'menu');
+    else if(name==='back'){
+      if(this.screen==='postView'){this.view.inspectPost=false;this.view.zoom=1;this.view.baseAngle=0;this.show('progress');this.ui.root.querySelector('[data-action="postView"]').focus();}
+      else this.show(this.screen==='settings'?this.settingsBack??'menu':this.screen==='brief'?'story':this.screen==='progress'?this.progressBack??'menu':'menu');
+    }
     else if(name==='brief'){const i=Number(value);if(i===0||this.progress.data.story[i-1]){this.shift=i;this.show('brief');}}
+    else if(name==='reply' && this.screen==='brief' && ['traffic','duty'].includes(value)){
+      this.dialogueTopic=value;this.ui.render();this.ui.root.querySelector('.speech-balloon').focus({preventScroll:true});
+    }
     else if(name==='startStory')void this.afterAd(()=>this.start('story',Number(value)));
     else if(name==='retry')void this.afterAd(()=>this.start(this.game.mode,this.game.shift));
     else if(name==='menu'){this.game=null;this.view.bind(this.demo);this.show('menu');}
@@ -139,28 +169,31 @@ class App {
     else if(name==='resume'){this.autoResume=false;if(![...this.pause.reasons].some(r=>r!=='screen'))this.show('gameplay');}
     else if(name==='finish')this.ui.confirm(t('finishConfirm'),'confirmFinish',t('confirm'));
     else if(name==='confirmFinish')this.game.end('quit');
-    else if(name==='cancelConfirm')this.ui.root.querySelector('.confirm-overlay')?.remove();
+    else if(name==='cancelConfirm')this.ui.dismissConfirm();
     else if(name==='photo'){this.show('photo');}
     else if(name==='hidePhoto')document.querySelector('#app').classList.toggle('photo-hidden');
-    else if(name==='exitPhoto'){this.view.baseAngle=0;this.view.zoom=1;this.view.host.style.filter='';this.photoFilter=0;this.show('paused');}
+    else if(name==='exitPhoto'){this.view.photoSubject=null;this.view.baseAngle=0;this.view.zoom=1;this.view.host.style.filter='';this.photoFilter=0;this.show('paused');}
     else if(name==='challengeTab'){this.challengeTab=value;this.ui.render();}
     else if(name==='claim'){const [id,kind]=value.split(':'),rank=this.progress.rank;if(this.progress.claim(id,kind)){this.audio.event('mission');this.view.event('reward');if(this.progress.rank>rank)this.ui.toastText(t('rankUp')+': '+t('rank'+this.progress.rank));}this.ui.render();}
-    else if(name==='map'){const m=INTERSECTIONS.find(m=>m.id===value);if(m&&this.progress.data.reputation>=m.unlock){this.progress.data.map=value;this.progress.save();this.view.setMap(m);this.demo=new Simulation({map:m,director:false,seed:731});this.demo.signals[0]=true;this.view.bind(this.demo);this.ui.render();}}
+    else if(name==='map'){const m=INTERSECTIONS.find(m=>m.id===value);if(m&&this.progress.data.reputation>=m.unlock){this.progress.data.map=value;this.progress.save();this.view.setMap(m);this.demo=this.makeDemo();this.view.bind(this.demo);this.ui.render();}}
     else if(name==='buy'){if(!this.progress.buy(value))this.ui.toast('notEnough');else{this.audio.event('unlock');this.view.event('unlock');}this.ui.render();}
     else if(name==='reset')this.ui.confirm(t('resetQuestion'),'confirmReset',t('delete'));
-    else if(name==='confirmReset'){this.progress.reset();this.game=null;this.view.setMap(this.map());this.demo=new Simulation({map:this.map(),director:false});this.view.bind(this.demo);this.language=this.platform.language();this.audio.apply(this.progress.data.settings);this.show('menu');this.ui.toast('resetDone');void this.platform.flush();}
+    else if(name==='confirmReset'){this.progress.reset();this.game=null;this.view.setMap(this.map(),this.progress.data.career);this.demo=this.makeDemo();this.view.bind(this.demo);this.language=this.platform.language();this.audio.apply(this.progress.data.settings);this.show('menu');this.ui.toast('resetDone');void this.platform.flush();}
   }
   setting(key,value) {
     this.progress.data.settings[key]=value;this.progress.save();this.audio.apply(this.progress.data.settings);
     if(key==='language'){this.language=value;this.ui.render();}
     if(key==='quality')this.view.quality(value);
   }
-  photoSetting(key,value) {if(key==='filter'){this.photoFilter=value;this.view.host.style.filter=['','sepia(.15) saturate(1.12)','hue-rotate(12deg) saturate(.85)'][value]??'';}else if(key==='angle')this.view.baseAngle=value;else this.view.zoom=value;this.view.resize();}
+  photoSetting(key,value) {if(key==='subject'){
+      this.view.photoSubject=[null,'officer','street'][value];this.view.zoom=value===1?9:value===2?6:1;
+      this.view.baseAngle=value===1?this.view.heroAngle-.15:value===2?-2.7:0;this.ui.render();this.ui.root.querySelector('[data-photo="subject"]')?.focus();
+    }else if(key==='filter'){this.photoFilter=value;this.view.host.style.filter=['','sepia(.15) saturate(1.12)','hue-rotate(12deg) saturate(.85)'][value]??'';}else if(key==='angle')this.view.baseAngle=value;else this.view.zoom=value;this.view.resize();}
   key(e) {
     if(e.ctrlKey||e.metaKey||e.altKey||e.repeat||e.target.closest('input,select,textarea'))return;
     const modal=this.ui?.root.querySelector('.confirm-overlay');
     if(modal){if(e.code==='Escape')this.action('cancelConfirm');if(e.code==='Tab'){e.preventDefault();const buttons=[...modal.querySelectorAll('button')],i=buttons.indexOf(document.activeElement);buttons[(i+(e.shiftKey?-1:1)+buttons.length)%buttons.length].focus();}return;}
-    if(e.code==='Escape'){e.preventDefault();if(this.screen==='gameplay')this.action('pause');else if(this.screen==='paused')this.action('resume');else if(this.screen==='photo')this.action('exitPhoto');return;}
+    if(e.code==='Escape'){e.preventDefault();if(this.screen==='gameplay')this.action('pause');else if(this.screen==='paused')this.action('resume');else if(this.screen==='photo')this.action('exitPhoto');else if(['progress','postView','brief'].includes(this.screen))this.action('back');return;}
     if(this.screen!=='gameplay'||this.pause.paused)return;
     const d={KeyW:0,ArrowUp:0,KeyD:1,ArrowRight:1,KeyS:2,ArrowDown:2,KeyA:3,ArrowLeft:3}[e.code];
     if(d!==undefined){e.preventDefault();this.audio.unlock();this.input.push('toggle',d);}
@@ -179,8 +212,13 @@ class App {
       this.accumulator+=elapsed;this.input.drain(this.game);
       while(this.accumulator>=B.step&&this.game.running&&this.screen==='gameplay'){this.game.tick();this.accumulator-=B.step;}
       this.audio.update(this.game);
-    } else if(this.screen==='menu'&&!document.hidden&&!this.pause.reasons.has('focus')&&!this.pause.reasons.has('platform')) {
-      this.demo.tick(elapsed);if(Math.floor(this.demo.time/2.8)!==this.demoSpawn){this.demoSpawn=Math.floor(this.demo.time/2.8);this.demo.spawn(this.demoSpawn%2?0:2,this.demoSpawn%3?'car':'taxi',0);}
+    } else if(['menu','brief'].includes(this.screen)&&!document.hidden&&!this.pause.reasons.has('focus')&&!this.pause.reasons.has('platform')) {
+      const demo=this.demo,axis=Math.floor(demo.time/9)%2;
+      const clearing=demo.vehicles.some(v=>v.active&&v.committed&&v.direction%2!==axis&&v.s<v.route.exitS+v.length*.5+.5);
+      for(let d=0;d<4;d++)demo.signals[d]=!clearing&&d%2===axis;
+      demo.tick(elapsed);
+      const arrival=Math.floor(demo.time/1.75);
+      if(arrival!==this.demoSpawn){this.demoSpawn=arrival;demo.spawn(arrival%4,['taxi','car','van','bus','pizza','car','truck'][arrival%7],0);}
       const caption=document.querySelector('.city-caption span:last-child');if(caption){const minutes=Math.floor(this.demo.timeOfDay*1440);caption.textContent=String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');}
     }
     const visible=this.game&&['gameplay','paused','results','photo'].includes(this.screen)?this.game:this.demo;

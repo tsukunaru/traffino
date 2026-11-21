@@ -1,23 +1,36 @@
-import { VEHICLES, MISSIONS, COSMETICS, BALANCE as B, RANKS, INTERSECTIONS, AD_COINS } from './config.js';
+import { VEHICLES, MISSIONS, COSMETICS, BALANCE as B, RANKS, INTERSECTIONS, AD_COINS, TRAINING, SERVICE } from './config.js';
 import { clamp, medalFor } from './systems.js';
 export const SAVE_KEY='traffino.save.v2';
-export function futureSave(raw) {try{return (typeof raw==='string'?JSON.parse(raw):raw)?.version>2;}catch{return false;}}
-const integer=(v, fallback=0)=>Number.isFinite(v)?clamp(Math.floor(v),0,1e12):fallback;
+const SAVE_VERSION = 3;
+export function futureSave(raw) {try{return (typeof raw==='string'?JSON.parse(raw):raw)?.version>SAVE_VERSION;}catch{return false;}}
+const integer=(v, max=1e12)=>Number.isFinite(v)?clamp(Math.floor(v),0,max):0;
 const statistic=v=>Number.isFinite(v)?clamp(v,0,1e12):0;
 export function freshSave() {
-  return {version:2,updatedAt:0,revision:0,reputation:0,coins:0,story:Array(8).fill(0),collection:{},best:{endless:0,rush:0,hardcore:0,story:0},totals:{},missions:{},daily:{date:'',progress:{},claimed:[]},session:{progress:{},claimed:[]},cosmetics:['classic'],selectedCosmetic:'classic',map:'garden',settings:{master:.65,music:.35,sfx:.7,language:'',shake:true,haptics:false,quality:'medium'},runs:0,adRewardRun:0};
+  return {version:SAVE_VERSION,career:{ served:0, learned:[], certified:[] },updatedAt:0,revision:0,reputation:0,coins:0,story:Array(8).fill(0),collection:{},best:{endless:0,rush:0,hardcore:0,story:0},totals:{},missions:{},daily:{date:'',progress:{},claimed:[]},session:{progress:{},claimed:[]},cosmetics:['classic'],selectedCosmetic:'classic',map:'garden',settings:{master:.65,music:.35,sfx:.7,language:'',shake:true,haptics:false,quality:'medium'},runs:0,adRewardRun:0};
 }
 export function parseSave(raw) {
   try {
     const x=typeof raw==='string'?JSON.parse(raw):raw;
     if(!x||typeof x!=='object'||Array.isArray(x))return null;
-    if(x.version>2)return null;
-    if(x.version!==1&&x.version!==2)return null;
+    if(![1, 2, SAVE_VERSION].includes(x.version))return null;
     const s=freshSave();
-    for(const k of ['updatedAt','revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
+    s.updatedAt=integer(x.updatedAt,Number.MAX_SAFE_INTEGER);
+    for(const k of ['revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
     s.story=s.story.map((_,i)=>clamp(integer(x.story?.[i]),0,3));
     for(const k of Object.keys(s.best))s.best[k]=integer(x.best?.[k]);
-    for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits'])s.totals[k]=statistic(x.totals?.[k]);
+    for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits','promptPasses'])s.totals[k]=statistic(x.totals?.[k]);
+    const career = s.career;
+    career.served = integer(x.version < SAVE_VERSION ? s.totals.passed : x.career?.served);
+    if (x.version === SAVE_VERSION) {
+      const learned = Array.isArray(x.career?.learned) ? x.career.learned : [];
+      const certified = Array.isArray(x.career?.certified) ? x.career.certified : [];
+      for (const skill of TRAINING) {
+        if (!skill.requires && certified.includes(skill.id)) career.certified.push(skill.id);
+        else if (learned.includes(skill.id) && (!skill.requires || career.learned.includes(skill.requires) || career.certified.includes(skill.requires))) {
+          career.learned.push(skill.id);
+        }
+      }
+    }
     for(const id of Object.keys(VEHICLES))if(x.collection?.[id])s.collection[id]={seen:integer(x.collection[id].seen),passed:integer(x.collection[id].passed)};
     for(const m of MISSIONS)s.missions[m.id]=x.missions?.[m.id]===true;
     s.cosmetics=COSMETICS.filter(c=>c.id==='classic'||x.cosmetics?.includes?.(c.id)).map(c=>c.id);
@@ -63,7 +76,7 @@ export class Progress {
   }
   save() {
     if(this.readOnly)return false;
-    const s=this.data;s.revision++;s.updatedAt=this.now();const text=JSON.stringify(s);
+    const s=this.data;s.revision++;s.updatedAt=Math.max(s.updatedAt,this.now());const text=JSON.stringify(s);
     try {const old=this.storage?.getItem(SAVE_KEY);if(parseSave(old))this.storage?.setItem(SAVE_KEY+'.backup',old);}catch{} // A full backup quota must not prevent replacing the primary save.
     try {this.storage?.setItem(SAVE_KEY,text);}catch{this.warn('saveUnavailable');}
     this.cloud(text);return true;
@@ -80,7 +93,12 @@ export class Progress {
       s.totals[key]=max?Math.max(s.totals[key]??0,value):(s.totals[key]??0)+delta;
       s.daily.progress[key]=max?Math.max(s.daily.progress[key]??0,value):(s.daily.progress[key]??0)+delta;
       s.session.progress[key]=max?Math.max(s.session.progress[key]??0,value):(s.session.progress[key]??0)+delta;
-      if(key==='passed'){s.coins+=delta*B.coinsPerCar;s.reputation+=delta*B.reputationPerCar;}
+      if (key === 'passed') {
+        s.coins += delta * this.payRate;
+        s.career.served += delta;
+        s.reputation += delta * B.reputationPerCar;
+      }
+      if (key === 'promptPasses' && this.hasSkill('dividend')) s.coins += delta * SERVICE.premium;
       if(key==='emergencyPassed')s.reputation+=delta*B.emergencyReputation;
       this.last[key]=value;
     }
@@ -98,7 +116,8 @@ export class Progress {
         this.data.story[game.shift]=Math.max(previous,medal);
       }
     }
-    this.data.coins+=bonus;this.save();return {medal,coins:game.stats.passed*B.coinsPerCar+bonus,reputation:game.stats.passed*B.reputationPerCar+game.stats.emergencyPassed*B.emergencyReputation+(game.reason==='complete'?25:0)};
+    const wages = this.wages(game.stats), premium = wages - game.stats.passed * this.payRate;
+    this.data.coins+=bonus;this.save();return {medal,bonus,wages,premium,coins:wages+bonus,reputation:game.stats.passed*B.reputationPerCar+game.stats.emergencyPassed*B.emergencyReputation+(game.reason==='complete'?25:0)};
   }
   claim(id,scope='all') {
     this.rollDaily();const m=MISSIONS.find(m=>m.id===id);if(!m)return false;
@@ -116,6 +135,46 @@ export class Progress {
     const item=COSMETICS.find(c=>c.id===id);if(!item)return false;
     if(!this.data.cosmetics.includes(id)) {if(this.data.coins<item.cost)return false;this.data.coins-=item.cost;this.data.cosmetics.push(id);}
     this.data.selectedCosmetic=id;this.save();return true;
+  }
+  get grade() { return this.data.career.certified.length; }
+  get payRate() { return B.coinsPerCar + this.grade + Number(this.hasSkill('ledger')); }
+  rateAfterPromotion(root) {
+    return B.coinsPerCar + this.grade + 1 + Number(root === 'ledger' || this.data.career.certified.includes('ledger'));
+  }
+  hasSkill(id) {
+    const { learned, certified } = this.data.career;
+    return learned.includes(id) || certified.includes(id);
+  }
+  wages(stats) {
+    const premium = this.hasSkill('dividend') ? (stats.promptPasses ?? 0) * SERVICE.premium : 0;
+    return stats.passed * this.payRate + premium;
+  }
+  canLearn(skill) {
+    return Boolean(skill) && !this.readOnly && !this.hasSkill(skill.id) && this.data.coins >= skill.cost
+      && (!skill.requires || this.hasSkill(skill.requires));
+  }
+  learn(id) {
+    const skill = TRAINING.find(item => item.id === id);
+    if (!this.canLearn(skill)) return false;
+    this.data.coins -= skill.cost;
+    this.data.career.learned.push(id);
+    this.save();
+    return true;
+  }
+  canPromote(root) {
+    const { served, certified } = this.data.career;
+    const advanced = TRAINING.find(skill => skill.requires && skill.requires === root);
+    return !this.readOnly && Boolean(advanced) && !certified.includes(root)
+      && this.hasSkill(advanced.id) && served >= SERVICE.promotionTargets[this.grade];
+  }
+  promote(root) {
+    if (!this.canPromote(root)) return false;
+    this.data.career.certified.push(root);
+    this.data.career.learned = [];
+    this.data.career.served = 0;
+    this.data.coins = 0;
+    this.save();
+    return true;
   }
   get rank() {return RANKS.filter(x=>this.data.reputation>=x).length-1;}
   rewardAd(run) {if(this.readOnly||run!==this.data.runs||run<=0||this.data.adRewardRun===run)return false;this.data.adRewardRun=run;this.data.coins+=AD_COINS;this.save();return true;}

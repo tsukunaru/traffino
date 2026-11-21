@@ -1,10 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { vehicleParts,lightPhase,SKY } from '../src/art.js';
+import { figureParts, joints, residents, paintUniform } from '../src/figures.js';
 import { VEHICLES } from '../src/config.js';
 import { MUSIC_STATES,SOUND_NAMES,musicSamples,soundSamples,engineSamples } from '../src/sound.js';
 test('all vehicle silhouettes fit the fixed instance pools and have lights',()=>{
   for(const kind of Object.keys(VEHICLES)){const parts=vehicleParts(kind);assert.ok(parts.filter(p=>p.role==='body').length<=55,kind);assert.ok(parts.filter(p=>p.role!=='body').length<=10,kind);assert.ok(parts.some(p=>p.role==='headlight'),kind);for(const p of parts)for(const key of ['x','y','z','sx','sy','sz'])assert.ok(Number.isFinite(p[key])&&(key.length<2||p[key]>0),kind+key);}
+});
+test('all six residents and the officer have coloured, jointed 3D models',()=>{
+  for(const style of ['officer',...residents.keys()]){
+    const parts=figureParts(style);
+    assert.deepEqual(Object.keys(parts).sort(),Object.keys(joints).sort());
+    for(const geo of Object.values(parts)){
+      assert.equal(geo.attributes.position.count,geo.attributes.color.count);
+      geo.computeBoundingSphere();assert.ok(Number.isFinite(geo.boundingSphere.radius)&&geo.boundingSphere.radius>.05);
+    }
+    if(style==='officer'){
+      const original=parts.body.attributes.color.array.slice();paintUniform(parts,0xcc5439);
+      assert.notDeepEqual(original,parts.body.attributes.color.array);
+      assert.ok(parts.rightArm.boundingSphere.radius>parts.leftArm.boundingSphere.radius);
+    }
+  }
 });
 test('lighting wraps at midnight and remains bounded across the full cycle',()=>{
   assert.deepEqual(lightPhase(0),lightPhase(1));assert.deepEqual(lightPhase(-.25),lightPhase(.75));for(let t=0;t<1;t+=.001){const p=lightPhase(t);assert.ok(p.index>=0&&p.index<SKY.length-1&&p.blend>=0&&p.blend<=1&&p.night>=0&&p.night<=1);}

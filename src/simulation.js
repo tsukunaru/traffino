@@ -1,11 +1,12 @@
-import { BALANCE as B, VEHICLES, STORY, INTERSECTIONS, EVENTS } from './config.js';
+import { BALANCE as B, VEHICLES, STORY, INTERSECTIONS, EVENTS, SERVICE } from './config.js';
 import { makeRoutes, conflictMatrix, sample, overlaps, rotate } from './routes.js';
 import { random, difficulty, flowAfter, passScore, clamp, storyGoalMet } from './systems.js';
 
 export class Simulation {
-  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true } = {}) {
+  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, radio=false } = {}) {
     seed ??= mode==='story'?(STORY[shift].seed??1000+shift):Date.now();
     this.mode=mode; this.shift=shift; this.map=map; this.emit=emit; this.rng=random(seed); this.seed=seed;
+    this.emergencyLimit = B.emergencyTimer + (radio ? SERVICE.radioSeconds : 0);
     this.routes=makeRoutes(map); this.conflicts=conflictMatrix(this.routes);
     this.directions=map.directions??[0,1,2,3];this.routesByDirection=this.directions.map(d=>this.routes.filter(r=>r.direction===d));
     this.vehicles=Array.from({length:B.capacity}, (_,id)=>({ id, active:false, x:0,z:0,dx:0,dz:1 }));
@@ -14,7 +15,7 @@ export class Simulation {
     this.dangerStates=[false,false,false,false];this.dangerClock=0;
     this.queues=Array.from({length:4},()=>({count:0,length:0,average:0,longest:0,jam:0}));
     this.lanes=Array.from({length:4},()=>[]); this.grid=Array.from({length:144},()=>[]);
-    this.waitingPeople=[0,0,0,0]; this.pedClock=8; this.eventClock=B.eventInterval;
+    this.waitingPeople=[0,0,0,0];this.pedestrianHead=[0,0,0,0]; this.pedClock=8; this.eventClock=B.eventInterval;
     this.time=0; this.elapsed=0; this.day=1; this.timeOfDay=.22; this.flow=1; this.running=true; this.director=director;
     this.trafficProfile={};this.spawnClock=1; this.serial=0; this.event=null; this.tutorial=mode==='story'&&shift===0 ? 0 : 4;
     this.densityScale=1; this.invulnerable=false; this.guaranteed=false;
@@ -24,6 +25,7 @@ export class Simulation {
     // Rush Hour rewards clearing every approach between collisions.
     this.circuit = mode === 'rush' ? new Set() : null;
     this.stats.circuits = 0;
+    this.stats.promptPasses = 0;
     this.forcedQueue=[];
     if (this.tutorial===0) this.spawn(0,'car',0);
   }
@@ -31,6 +33,7 @@ export class Simulation {
   command({type,direction}) {
     if (!this.running || !Number.isInteger(direction) || !this.directions.includes(direction)) return;
     if(type==='toggle') {
+      if(this.tutorial===2 && direction!==1) return;
       if(this.tutorial<2 && direction!==0) return;
       if(this.tutorial===1 && this.stats.passed===0 && this.signals[0]) return;
       this.signals[direction]=!this.signals[direction];
@@ -54,7 +57,7 @@ export class Simulation {
     if(this.event?.phase==='active'&&this.event.kind==='turn'&&this.event.direction===direction&&turn===1)turn=0;
     const choices=this.routesByDirection[this.directions.indexOf(direction)];
     const route=choices.find(r=>r.turn===turn)??choices[0];if(!route)return null;turn=route.turn;
-    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:B.emergencyTimer,emergencyFailed:false,crashLeft:0,broken:0});
+    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:this.emergencyLimit,emergencyFailed:false,crashLeft:0,broken:0});
     sample(route,0,v); this.emit('vehicleSpawned',v);
     if(def.emergencyPriority)this.emit('emergency',v);
     if(def.reckless)this.emit('reckless',v);
@@ -154,6 +157,7 @@ export class Simulation {
     const def=VEHICLES[v.kind], timely=def.emergencyPriority?!v.emergencyFailed:v.wait<(def.scheduleTolerance??B.timelyWait);
     this.flow=flowAfter(this.flow,v.wait,timely&&(def.bus||def.emergencyPriority));
     this.stats.score+=passScore(def,this.flow,timely,this.mode);
+    if (v.wait < B.timelyWait && this.flow >= SERVICE.premiumFlow) this.stats.promptPasses++;
     this.stats.passed++; if(def.bus)this.stats.buses++; else this.stats.cars++;
     if(def.emergencyPriority&&timely)this.stats.emergencyPassed++;
     this.stats.totalWait+=v.wait; this.stats.averageWait=this.stats.totalWait/this.stats.passed;
@@ -210,21 +214,27 @@ export class Simulation {
     if(!b||this.mode==='hardcore'||this.stats.collisions>=3)this.end(!b?'pedestrian':'collision');
   }
 
+  queuePoint(direction,index,out) {
+    return rotate(-4.7-(index%2)*.52,-this.map.entry-.8-Math.floor(index/2)*.55,direction,out);
+  }
   cross(direction) {
     if(this.people.some(p=>p.active&&p.direction===direction))return;
     const count=Math.min(this.waitingPeople[direction],8);let started=0;
     for(let i=0;i<count;i++) {
       const p=this.people.find(p=>!p.active);if(!p)break;
-      Object.assign(p,{active:true,direction,t:-i*.12,speed:.16+this.rng()*.02});started++;
-      const pos=rotate(-4,-this.map.entry-.8,direction);p.x=pos.x;p.z=pos.z;
+      this.queuePoint(direction,i,p);
+      Object.assign(p,{active:true,direction,appearance:direction*8+this.pedestrianHead[direction]+i,fromX:p.x,fromZ:p.z,t:-i*.12,speed:.16+this.rng()*.02});started++;
     }
-    this.waitingPeople[direction]-=started;
+    this.waitingPeople[direction]-=started;this.pedestrianHead[direction]+=started;
     if(started)this.emit('pedestriansStarted',{direction,count:started});
   }
 
   updatePeople(dt) {
     for(const p of this.people)if(p.active) {
-      p.t+=dt*p.speed;rotate(-4+8*clamp(p.t,0,1),-this.map.entry-.8,p.direction,p);
+      p.t+=dt*p.speed;
+      const t=clamp(p.t,0,1),join=Math.min(1,t*4);
+      rotate(-4.7+9.4*t,-this.map.entry-.8,p.direction,p);
+      p.x=(p.fromX??p.x)*(1-join)+p.x*join;p.z=(p.fromZ??p.z)*(1-join)+p.z*join;
       if(p.t>=1){p.active=false;this.stats.pedestrians++;this.stats.score+=Math.round(B.score.pedestrian*this.flow);this.emit('pedestrianPassed',p);}
     }
   }

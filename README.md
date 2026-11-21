@@ -26,6 +26,7 @@ npm run dev
 
 ## Скриншоты
 
+![Инструктаж Миро перед первой сменой](screenshots/mentor-briefing.png)
 ![Главное меню Traffino](screenshots/menu.webp)
 ![Городской перекрёсток](screenshots/city.webp)
 ![Игра на мобильном экране](screenshots/mobile.webp)

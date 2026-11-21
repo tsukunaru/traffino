@@ -5,7 +5,9 @@ import { rotate } from './routes.js';
 import { PALETTE as P, SKY, lightPhase, vehicleParts, buildCity } from './art.js';
 
 export class CityView {
-  constructor(host,map) {
+  constructor(host,map,career={learned:[],certified:[]}) {
+    this.postSkills=new Set([...career.learned,...career.certified]);
+    this.postGrade=career.certified.length;
     this.host=host;this.map=map;this.scene=new THREE.Scene();
     this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
     this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.06;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -55,16 +57,25 @@ export class CityView {
     for(let d=0;d<4;d++){const g=new THREE.Group();g.rotation.y=-d*Math.PI/2;this.environment.add(g);this.mesh(g,'cylinder',-this.map.width/2-.68,1.43,-this.map.entry-1,.18,2.5,.18,P.ink);this.box(g,-this.map.width/2-.68,2.67,-this.map.entry-1,.72,1.08,.5,P.ink);this.signs.push(this.mesh(g,'sphere',-this.map.width/2-.68,2.73,-this.map.entry-.72,.46,.46,.17,0xde745e));this.roadGlows.push(this.box(g,-this.map.lane,.23,-this.map.entry-1.97,this.map.width/2-.4,.025,.15,0xe18971));}
     this.character=new THREE.Group();this.character.position.set(5.25,.23,5.65);this.character.scale.setScalar(1.32);this.environment.add(this.character);this.heroBody=new THREE.Group();this.character.add(this.heroBody);
     this.uniform=this.box(this.heroBody,0,.88,0,.72,.84,.46,0x4f9387);this.box(this.heroBody,0,.65,.03,.76,.13,.49,P.ink);this.box(this.heroBody,0,1.39,.02,.75,.7,.59,0xf1c69d);this.box(this.heroBody,0,1.8,-.02,.85,.26,.71,0x467c77);this.box(this.heroBody,0,1.7,.37,.77,.09,.37,P.ink);this.mesh(this.heroBody,'sphere',0,1.80,.37,.18,.17,.07,P.yellow);
-    this.eyes=[];for(const x of [-.18,.18]){this.eyes.push(this.mesh(this.heroBody,'sphere',x,1.44,.326,.115,.15,.07,P.ink));this.mesh(this.heroBody,'sphere',x-.02,1.47,.37,.04,.045,.025,P.white);this.box(this.heroBody,x,1.57,.325,.16,.04,.05,0x73574d);this.mesh(this.heroBody,'sphere',x*1.42,1.30,.32,.17,.09,.06,0xe99983);this.box(this.heroBody,x,.29,0,.26,.54,.31,P.ink);this.box(this.heroBody,x,.09,.12,.3,.17,.47,0x34394a);}
+    this.eyes=[];for(const x of [-.18,.18]){this.eyes.push(this.mesh(this.heroBody,'sphere',x,1.44,.326,.115,.15,.07,P.ink));this.mesh(this.heroBody,'sphere',x-.02,1.47,.37,.04,.045,.025,P.white);this.box(this.heroBody,x,1.55,.325,.21,.065,.065,0x514945).rotation.z=x*.45;this.box(this.heroBody,x*1.42,1.29,.332,.18,.085,.08,0x514945).rotation.z=x*-.85;this.box(this.heroBody,x,.29,0,.26,.54,.31,P.ink);this.box(this.heroBody,x,.09,.12,.3,.17,.47,0x34394a);}
     this.mesh(this.heroBody,'sphere',0,1.35,.36,.16,.14,.17,0xf1c69d);this.whistle=this.mesh(this.heroBody,'sphere',.065,1.25,.42,.12,.09,.13,P.yellow);
-    this.box(this.heroBody,0,1.25,.325,.18,.04,.04,0xa46c5c);this.box(this.heroBody,-.19,1.02,.25,.15,.19,.035,P.yellow);
+    this.box(this.heroBody,0,1.29,.345,.35,.075,.075,0x514945);this.box(this.heroBody,-.19,1.02,.25,.15,.19,.035,P.yellow);
     for(const name of ['arm','batonArm']){this[name]=new THREE.Group();this[name].position.set(name==='arm'?-.43:.43,1.13,0);this.heroBody.add(this[name]);this.box(this[name],0,-.24,0,.23,.53,.28,0x4f9387);this.box(this[name],0,-.52,0,.27,.23,.29,P.white);}
     for(let i=0;i<5;i++)this.box(this.batonArm,0,-.5,.15+i*.13,.13,.13,.14,i%2?P.white:0xd58065);
     this.heroState='idle';this.heroUntil=0;this.heroFacing=.2;this.heroAngle=.2;
     this.eventBarrier=new THREE.Group();this.environment.add(this.eventBarrier);this.box(this.eventBarrier,0,.72,0,3.4,.65,.2,P.cream);for(let i=0;i<5;i++){const stripe=this.box(this.eventBarrier,-1.25+i*.62,.72,.12,.27,.65,.04,0xdb8e5f);stripe.rotation.z=-.4;}for(const x of [-1.25,1.25])this.box(this.eventBarrier,x,.34,0,.18,.65,.6,P.ink);this.eventBarrier.visible=false;
     this.birds=new THREE.Group();this.environment.add(this.birds);for(let i=0;i<3;i++){const b=new THREE.Group();this.birds.add(b);for(const side of [-1,1])this.box(b,side*.22,0,0,.5,.055,.20,0xf9edcf);}
   }
-  setMap(map) {if(this.map.id!==map.id){this.map=map;this.buildEnvironment();this.quality(this.qualityLevel);}else this.resize();}
+  setMap(map,career) {
+    let rebuild=this.map.id!==map.id;
+    if (career) {
+      const skills=new Set([...career.learned,...career.certified]);
+      rebuild=rebuild || this.postGrade!==career.certified.length || skills.size!==this.postSkills.size || [...skills].some(id=>!this.postSkills.has(id));
+      this.postSkills=skills;this.postGrade=career.certified.length;
+    }
+    this.map=map;
+    if(rebuild){this.buildEnvironment();this.quality(this.qualityLevel);}else this.resize();
+  }
   vehiclePreviews() {
     if(this.previews)return this.previews;const images={},renderer=this.renderer,ratio=renderer.getPixelRatio(),scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-3.3,3.3,2.475,-2.475,.1,50);
     camera.position.set(7,5.8,9);camera.lookAt(0,.8,0);scene.add(new THREE.HemisphereLight(0xfff1d8,0x8b90b4,2));const sun=new THREE.DirectionalLight(0xffe1b8,2.8);sun.position.set(-4,8,6);scene.add(sun);
@@ -133,7 +144,11 @@ export class CityView {
     }
     for(const p of game.people)if(p.active)this.person(p.x,p.z,p.id,game.time,p.t>0,p.direction*Math.PI/2+Math.PI/2);
     for(let d=0;d<4;d++)for(let i=0;i<Math.min(game.waitingPeople[d],this.qualityLevel==='low'?3:8);i++){const p=rotate(-4.7-(i%2)*.52,-this.map.entry-.8-Math.floor(i/2)*.55,d);this.person(p.x,p.z,i+d*8,game.time,false,d*Math.PI/2+Math.PI/2);}
-    if(this.qualityLevel!=='low')for(let i=0;i<8;i++){const d=i%4,p=rotate(-7.1,-13+Math.sin(game.time*.13+i)*4,d);this.person(p.x,p.z,24+i,game.time,true,d*Math.PI/2);}
+    if(this.qualityLevel!=='low')for(let i=0;i<8;i++){
+      const d=i%4, phase=game.time*.13+i, lane=this.map.width/2+(i<4?.85:2.1);
+      const p=rotate(-lane,-13+Math.sin(phase)*4,d);
+      this.person(p.x,p.z,24+i,game.time,true,-d*Math.PI/2+(Math.cos(phase)<0?Math.PI:0));
+    }
     for(const p of this.effects)if(p.life>0){p.life=Math.max(0,p.life-step);p.x+=p.vx*step;p.z+=p.vz*step;p.y+=p.vy*step;p.vy-=3.8*step;const size=p.size*Math.min(1,p.life*5);this.instance(this.particles,p.x,Math.max(.25,p.y),p.z,size,size,size,p.color);}
     for(const mesh of [this.cars,this.wheels,this.hubs,this.lights,this.people,this.beams,this.lightPools,this.particles]){mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;}
     if(this.debugMarkers)this.debugMarkers.visible=this.debugRoutes;for(const line of this.routeLines)line.visible=this.debugRoutes;if(this.showRoutes&&!this.debugRoutes)for(const lane of game.lanes){const lead=lane.find(v=>v.active&&!v.committed);if(lead)this.routeLines[lead.route.id].visible=true;}
@@ -146,6 +161,7 @@ export class CityView {
     this.eventBarrier.visible=game.event?.phase==='active'&&['works','turn'].includes(game.event.kind);if(this.eventBarrier.visible){const p=rotate(this.map.lane,-this.map.entry-2,game.event.direction);this.eventBarrier.position.set(p.x,.08,p.z);this.eventBarrier.rotation.y=-game.event.direction*Math.PI/2;}
     this.birds.visible=night<.2&&this.qualityLevel!=='low';this.birds.children.forEach((bird,i)=>{bird.position.set(-18+Math.sin(game.time*.13+i*.6)*5,9+i*.5,-18+Math.cos(game.time*.13+i*.6)*5);bird.rotation.y=-game.time*.13-i*.6;bird.children.forEach((wing,k)=>wing.rotation.z=(k?1:-1)*(.2+Math.sin(game.time*7+i)*.4));});
     this.shakeLeft=Math.max(0,this.shakeLeft-step);const shake=this.shakeLeft>0&&settings.shake?Math.sin(this.shakeLeft*80)*this.shakeLeft*.18:0;this.cameraAngle+=(this.baseAngle+.42-this.cameraAngle)*Math.min(1,dt*9);const z=this.currentZoom;this.currentZoom+=(this.zoom-this.currentZoom)*Math.min(1,dt*10);if(Math.abs(z-this.currentZoom)>.0001)this.setProjection();
-    this.cameraImpulse=Math.max(0,(this.cameraImpulse??0)-dt*.025);this.camera.position.set(Math.sin(this.cameraAngle)*46+shake,48-(settings.shake?this.cameraImpulse*30:0),Math.cos(this.cameraAngle)*46);this.camera.lookAt(0,1.3,0);this.camera.updateMatrixWorld();this.renderer.render(this.scene,this.camera);
+    this.cameraImpulse=Math.max(0,(this.cameraImpulse??0)-dt*.025);const target=this.inspectPost?this.postPosition:null, cx=target?.x??0, cz=target?.z??0;
+    this.camera.position.set(cx+Math.sin(this.cameraAngle)*46+shake,this.inspectPost?34:48-(settings.shake?this.cameraImpulse*30:0),cz+Math.cos(this.cameraAngle)*46);this.camera.lookAt(cx,this.inspectPost?2.5:1.3,cz);this.camera.updateMatrixWorld();this.renderer.render(this.scene,this.camera);
   }
 }

@@ -174,6 +174,93 @@ function drawQuay(v, g, e) {
   }
 }
 
+function dutyStation(v, city) {
+  const p=PALETTE, booth=new THREE.Group();
+  booth.position.set(11.6,.22,10.9);
+  booth.rotation.y=-.28;
+  city.add(booth);
+  v.postPosition=booth.position;
+  const box=(...parts)=>v.box(booth,...parts);
+  const round=(...parts)=>v.mesh(booth,'cylinder',...parts);
+
+  // Stepped kerb, enamel panels, glazed corner and a folding street counter.
+  box(0,.14,0,4.9,.28,3.95,p.stone);
+  box(-.3,.17,2.05,2.8,.19,.54,p.cream);
+  box(0,.30,0,4.44,.19,3.46,p.ink);
+  box(0,.90,0,4.29,1.18,3.35,p.mint);
+  for(const x of [-1.55,-.78,0,.78,1.55])box(x,.91,1.68,.055,1.08,.09,p.glass);
+  box(0,1.5,0,4.48,.18,3.51,p.cream);
+  box(0,2.23,-1.58,4.2,1.42,.14,p.glass);
+  for(const x of [-2.04,2.04]){
+    box(x,2.24,0,.12,1.49,3.09,p.glass).material=v.shopWindowMaterial;
+    box(x,2.23,.06,.18,1.51,.11,p.cream);
+    for(const z of [-1.57,1.57])box(x,2.25,z,.19,1.56,.2,p.cream);
+  }
+  box(0,2.27,-1.45,1.82,.74,.1,p.cream);
+  for(const x of [-1.49,1.43]){
+    box(x,2.26,-1.44,.64,.92,.18,p.plum);
+    for(const h of [1.98,2.25,2.52])box(x,h,-1.29,.58,.10,.24,p.cream);
+  }
+  for(const y of [2.1,2.31,2.53])box(0,y,-1.38,1.32,.046,.04,p.glass);
+  box(-.18,1.57,1.76,3.25,.17,.60,p.plum);
+  box(-.18,1.67,1.79,3.28,.08,.62,p.cream);
+  for(const x of [-1.35,1])box(x,1.42,1.76,.13,.43,.55,p.ink).rotation.x=-.2;
+  box(0,3.03,0,4.69,.25,3.79,p.ink);
+  box(0,3.19,0,4.75,.14,3.86,p.yellow);
+  box(0,3.32,0,4.63,.17,3.74,p.mint);
+  box(0,3.45,-.12,3.86,.12,3.05,p.glass);
+  for(const x of [-1.5,-.75,0,.75,1.5])box(x,3.53,-.12,.06,.05,2.85,p.mint);
+  // Glazed eaves, a striped canvas valance and the lamp over the working counter.
+  for(let i=0;i<8;i++){
+    const x=-1.82+i*.52, color=i%2?p.cream:p.mint;
+    box(x,2.99,1.92,.521,.12,.72,color).rotation.x=.23;
+    box(x,2.83,2.24,.521,.19,.12,color);
+  }
+  const taskLamp=box(-.92,2.78,.97,.93,.14,.36,p.cream);
+  taskLamp.material=v.lampMaterial;
+  box(-1.47,1.81,1.57,.25,.25,.24,p.coral);
+  for(const x of [-1.53,-1.42])box(x,2.01,1.58,.05,.32,.05,p.yellow).rotation.z=x===-1.53?.18:-.1;
+  for(const z of [-.97,.1,1.16])box(2.16,.95,z,.08,.83,.05,p.glass);
+  box(2.2,.89,.23,.13,.61,.85,p.cream);
+  for(const y of [.72,.87,1.02])box(2.29,y,.23,.07,.05,.66,p.glass);
+  // A raised street number and three signal lenses read at diorama scale.
+  box(-1.1,3.64,1.48,1.75,.73,.25,p.cream);
+  box(-1.10,3.66,1.64,1.58,.58,.08,p.glass);
+  v.sign(booth,'01',-1.1,3.66,1.69,1.43,.55,'#fff1c7');
+  for(const [i,col] of [p.coral,p.yellow,p.mint].entries())round(.22+i*.38,3.15,1.98,.22,.06,.22,col,Math.PI/2);
+  for(let i=0;i<v.postGrade;i++)box(1.58-i*.28,2.89,1.92,.15,.3,.055,p.yellow).rotation.z=-.42;
+
+  if(v.postSkills.has('board')){
+    // The double-arrow enamel board faces the junction outside the booth.
+    for(const x of [-3.07,-2.27])box(x,1.2,1.15,.11,1.94,.12,p.ink);
+    box(-2.67,2,1.15,1.62,1.40,.21,p.cream);
+    box(-2.67,2,1.29,1.44,1.22,.12,p.glass);
+    box(-2.99,1.98,1.38,.105,.65,.06,p.white);
+    for(const side of [-1,1])box(-2.99+side*.1,2.23,1.38,.095,.29,.06,p.yellow).rotation.z=side*.78;
+    box(-2.47,1.9,1.38,.105,.47,.06,p.white);
+    box(-2.30,2.10,1.38,.41,.105,.06,p.white);
+    for(const side of [-1,1])box(-2.19,2.10+side*.1,1.38,.29,.095,.06,p.yellow).rotation.z=-side*.78;
+  }
+  if(v.postSkills.has('ledger')){
+    box(.85,1.84,1.65,.81,.30,.62,p.mint);
+    box(.85,2.03,1.63,.69,.13,.55,p.cream);
+    round(.85,2.19,1.45,.31,.69,.31,p.white).rotation.z=Math.PI/2;
+    box(.85,2.05,1.90,.50,.045,.35,p.white).rotation.x=.25;
+  }
+  if(v.postSkills.has('radio')){
+    round(1.66,3.69,-1.22,.43,.47,.43,p.cream);
+    round(1.66,4.71,-1.22,.105,2.15,.105,p.ink);
+    for(const [y,w] of [[4.75,.82],[5.12,1.19],[5.47,1.63]])box(1.66,y,-1.22,w,.075,.095,p.yellow);
+    box(-.86,1.88,1.63,.79,.38,.51,p.ink);
+    for(const x of [-1.10,-.96,-.82])box(x,1.9,1.90,.045,.18,.06,p.cream);
+  }
+  if(v.postSkills.has('dividend')){
+    box(.74,.98,1.78,1.65,.72,.14,p.glass);
+    box(.74,1.02,1.88,1.44,.55,.07,p.yellow);
+    v.sign(booth,'+2',.74,1.03,1.93,1.38,.52,'#343f44');
+  }
+}
+
 export function buildCity(v) {
   const g=v.city,map=v.map,e=map.extent+1,P=PALETTE;
   v.box(g,0,-.72,0,e*2,1.4,e*2,0xcfbba1);v.box(g,0,-.05,0,e*2,.18,e*2,P.stone);
@@ -195,8 +282,16 @@ export function buildCity(v) {
     }
     for(let i=0;i<2;i++){
       if (map.id==='harbor' && d===1 && i===1) continue; // Container yard.
-      const x=-7.5-i*3.8,z=-11.5-i*4.6;
+      const x=d===2&&i===1?-8.15:-7.5-i*3.8,z=d===2&&i===1?-18.6:-11.5-i*4.6;
       v.box(q,x,.36,z,2.6,.43,2.5,0xd4b793);v.box(q,x,.6,z,2.3,.08,2.2,0x83995e);
+      if(d===2&&i===0){
+        // Low planting keeps the station board visible from the pavement.
+        for(const side of [-1,0,1]){
+          v.mesh(q,'sphere',x+side*.65,.82,z,.8,.54,.76,0x80a778);
+          v.mesh(q,'sphere',x+side*.60,1.07,z-.05,.28,.22,.3,side?P.yellow:P.coral);
+        }
+        continue;
+      }
       v.mesh(q,'cylinder',x,1.35,z,.26,1.7,.26,0x9c7756);
       for(const [dx,dy,dz,r] of [[0,2.5,0,1.2],[-.65,2.18,.2,.77],[.6,2.45,-.1,.8]])v.mesh(q,'sphere',x+dx,dy,z+dz,r*1.6,r*1.65,r*1.6,i?0x9ab578:0x80a778);
     }
@@ -207,6 +302,7 @@ export function buildCity(v) {
     v.box(q,-8.7,.52,-19.5,.55,.52,.5,0xdcb585);v.box(q,-8.7,.80,-19.5,.12,.025,.5,P.cream);
     for(let i=0;i<3;i++)v.mesh(q,'sphere',-12.5+i*.42,.63,-7.25,.32,.45,.32,i%2?0xdd957c:0xebc569);
   }
+  dutyStation(v,g);
   if(map.id==='harbor')building(v,g,-16,-18,7,6.2,6.2,P.glass,'DOCK');
   else {
     clockHall(v,g,-16,-18);

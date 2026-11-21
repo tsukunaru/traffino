@@ -9,6 +9,7 @@ import { AudioSystem } from './audio.js';
 import { UI } from './ui.js';
 import { translator } from './i18n.js';
 import './styles.css';
+import './station.css';
 
 class App {
   constructor() {
@@ -34,8 +35,8 @@ class App {
     this.progress.data=selectSave(this.progress.data,parseSave(cloudRaw));this.progress.rollDaily();
     this.language=this.progress.data.settings.language||this.platform.language();
     await loading(45);
-    try {this.view=new CityView(document.querySelector('#world'),this.map());}
-    catch {const t=translator(this.language);document.querySelector('#ui').innerHTML=`<section class="fatal"><h1>Traffino</h1><p>${t('webglError')}</p><button id="reload">${t('reload')}</button></section>`;document.querySelector('#reload').onclick=()=>location.reload();return;}
+    try {this.view=new CityView(document.querySelector('#world'),this.map(),this.progress.data.career);}
+    catch (error) {if(__DEV__)console.error(error);const t=translator(this.language);document.querySelector('#ui').innerHTML=`<section class="fatal"><h1>Traffino</h1><p>${t('webglError')}</p><button id="reload">${t('reload')}</button></section>`;document.querySelector('#reload').onclick=()=>location.reload();return;}
     this.view.onContextLost=()=>this.externalPause('context',true);
     await loading(65);
     this.ui=new UI(this);this.audio.prepare();this.audio.apply(this.progress.data.settings);this.view.quality(this.progress.data.settings.quality);
@@ -43,7 +44,7 @@ class App {
     for(let d=0;d<4;d++){const car=this.demo.spawn(d,d===0?'taxi':d===2?'bus':'car',0);if(car)car.s=4+d*3;}
     this.view.bind(this.demo);this.view.render(this.demo,0,this.viewSettings());
     await loading(85);
-    await Promise.all([...['traffino-logo.png','junior-vehicles.png','junior-shops.png'].map(name=>new Promise(resolve=>{const image=new Image();image.onload=image.onerror=resolve;image.src='./assets/'+name;})),document.fonts?.load('900 24px Nunito').catch(()=>{})]);
+    await Promise.all([...['traffino-logo.png','miro-portrait.jpg','junior-vehicles.png','junior-shops.png'].map(name=>new Promise(resolve=>{const image=new Image();image.onload=image.onerror=resolve;image.src='./assets/'+name;})),document.fonts?.load('900 24px Nunito').catch(()=>{})]);
     await loading(100);
     this.show('menu');this.platform.ready();for(const key of notices)this.ui.toast(key);
     if(globalThis.PointerEvent)this.view.canvas.addEventListener('pointerdown',e=>this.canvasInput(e));
@@ -59,6 +60,7 @@ class App {
     if(this.screen==='menu')this.audio.menu();
   }
   show(screen) {
+    if(['brief','progress','postView'].includes(screen))this.ui?.toastElement.classList.remove('show');
     this.screen=screen;this.pause.set('screen',screen!=='gameplay');this.syncActivity();this.ui?.render();this.view?.resize();
   }
   externalPause(reason,active) {
@@ -128,9 +130,25 @@ class App {
     else if(name==='rewarded')void this.rewardedCoins();
     else if(name==='fullscreen')void this.platform.fullscreen();
     else if(name==='continue'){this.shift=this.progress.data.story.findIndex(m=>!m);if(this.shift<0)this.shift=7;this.show('brief');}
-    else if(['story','collection','challenges','progress'].includes(name))this.show(name);
+    else if(name==='progress' && ['menu','results'].includes(this.screen)){this.progressBack=this.screen;this.show('progress');}
+    else if(['story','collection','challenges'].includes(name))this.show(name);
+    else if(name==='learn' && this.screen==='progress' && this.progress.learn(value)){
+      this.view.setMap(this.map(),this.progress.data.career);
+      this.audio.event('unlock');this.ui.refreshStation(value);this.ui.toastText(t('installed')+' · '+t('skill_'+value));
+    }
+    else if(name==='review' && this.screen==='progress' && this.progress.canPromote(value)){this.ui.review(value);}
+    else if(name==='confirmPromotion' && this.screen==='progress' && this.ui.root.querySelector('.confirm-overlay [data-action="confirmPromotion"]')?.dataset.value===value && this.progress.promote(value)){
+      this.ui.dismissConfirm();this.view.setMap(this.map(),this.progress.data.career);
+      this.audio.event('reward');this.ui.render();this.ui.toastText(t('certifiedNote')+' · '+t('grade'+this.progress.grade));
+    }
+    else if(name==='postView' && this.screen==='progress'){
+      this.view.inspectPost=true;this.view.zoom=4.8;this.view.baseAngle=-1.26;this.show('postView');this.ui.root.querySelector('button').focus();
+    }
     else if(name==='settings'){this.settingsBack=this.screen==='gameplay'?'paused':this.screen;this.autoResume=false;this.show('settings');}
-    else if(name==='back')this.show(this.screen==='settings'?this.settingsBack??'menu':this.screen==='brief'?'story':'menu');
+    else if(name==='back'){
+      if(this.screen==='postView'){this.view.inspectPost=false;this.view.zoom=1;this.view.baseAngle=0;this.show('progress');this.ui.root.querySelector('[data-action="postView"]').focus();}
+      else this.show(this.screen==='settings'?this.settingsBack??'menu':this.screen==='brief'?'story':this.screen==='progress'?this.progressBack??'menu':'menu');
+    }
     else if(name==='brief'){const i=Number(value);if(i===0||this.progress.data.story[i-1]){this.shift=i;this.show('brief');}}
     else if(name==='startStory')void this.afterAd(()=>this.start('story',Number(value)));
     else if(name==='retry')void this.afterAd(()=>this.start(this.game.mode,this.game.shift));
@@ -139,7 +157,7 @@ class App {
     else if(name==='resume'){this.autoResume=false;if(![...this.pause.reasons].some(r=>r!=='screen'))this.show('gameplay');}
     else if(name==='finish')this.ui.confirm(t('finishConfirm'),'confirmFinish',t('confirm'));
     else if(name==='confirmFinish')this.game.end('quit');
-    else if(name==='cancelConfirm')this.ui.root.querySelector('.confirm-overlay')?.remove();
+    else if(name==='cancelConfirm')this.ui.dismissConfirm();
     else if(name==='photo'){this.show('photo');}
     else if(name==='hidePhoto')document.querySelector('#app').classList.toggle('photo-hidden');
     else if(name==='exitPhoto'){this.view.baseAngle=0;this.view.zoom=1;this.view.host.style.filter='';this.photoFilter=0;this.show('paused');}
@@ -148,7 +166,7 @@ class App {
     else if(name==='map'){const m=INTERSECTIONS.find(m=>m.id===value);if(m&&this.progress.data.reputation>=m.unlock){this.progress.data.map=value;this.progress.save();this.view.setMap(m);this.demo=new Simulation({map:m,director:false,seed:731});this.demo.signals[0]=true;this.view.bind(this.demo);this.ui.render();}}
     else if(name==='buy'){if(!this.progress.buy(value))this.ui.toast('notEnough');else{this.audio.event('unlock');this.view.event('unlock');}this.ui.render();}
     else if(name==='reset')this.ui.confirm(t('resetQuestion'),'confirmReset',t('delete'));
-    else if(name==='confirmReset'){this.progress.reset();this.game=null;this.view.setMap(this.map());this.demo=new Simulation({map:this.map(),director:false});this.view.bind(this.demo);this.language=this.platform.language();this.audio.apply(this.progress.data.settings);this.show('menu');this.ui.toast('resetDone');void this.platform.flush();}
+    else if(name==='confirmReset'){this.progress.reset();this.game=null;this.view.setMap(this.map(),this.progress.data.career);this.demo=new Simulation({map:this.map(),director:false});this.view.bind(this.demo);this.language=this.platform.language();this.audio.apply(this.progress.data.settings);this.show('menu');this.ui.toast('resetDone');void this.platform.flush();}
   }
   setting(key,value) {
     this.progress.data.settings[key]=value;this.progress.save();this.audio.apply(this.progress.data.settings);
@@ -160,7 +178,7 @@ class App {
     if(e.ctrlKey||e.metaKey||e.altKey||e.repeat||e.target.closest('input,select,textarea'))return;
     const modal=this.ui?.root.querySelector('.confirm-overlay');
     if(modal){if(e.code==='Escape')this.action('cancelConfirm');if(e.code==='Tab'){e.preventDefault();const buttons=[...modal.querySelectorAll('button')],i=buttons.indexOf(document.activeElement);buttons[(i+(e.shiftKey?-1:1)+buttons.length)%buttons.length].focus();}return;}
-    if(e.code==='Escape'){e.preventDefault();if(this.screen==='gameplay')this.action('pause');else if(this.screen==='paused')this.action('resume');else if(this.screen==='photo')this.action('exitPhoto');return;}
+    if(e.code==='Escape'){e.preventDefault();if(this.screen==='gameplay')this.action('pause');else if(this.screen==='paused')this.action('resume');else if(this.screen==='photo')this.action('exitPhoto');else if(['progress','postView','brief'].includes(this.screen))this.action('back');return;}
     if(this.screen!=='gameplay'||this.pause.paused)return;
     const d={KeyW:0,ArrowUp:0,KeyD:1,ArrowRight:1,KeyS:2,ArrowDown:2,KeyA:3,ArrowLeft:3}[e.code];
     if(d!==undefined){e.preventDefault();this.audio.unlock();this.input.push('toggle',d);}

@@ -115,8 +115,8 @@ export class Progress {
         this.data.story[game.shift]=Math.max(previous,medal);
       }
     }
-    const wages = this.wages(game.stats);
-    this.data.coins+=bonus;this.save();return {medal,bonus,wages,coins:wages+bonus,reputation:game.stats.passed*B.reputationPerCar+game.stats.emergencyPassed*B.emergencyReputation+(game.reason==='complete'?25:0)};
+    const wages = this.wages(game.stats), premium = wages - game.stats.passed * this.payRate;
+    this.data.coins+=bonus;this.save();return {medal,bonus,wages,premium,coins:wages+bonus,reputation:game.stats.passed*B.reputationPerCar+game.stats.emergencyPassed*B.emergencyReputation+(game.reason==='complete'?25:0)};
   }
   claim(id,scope='all') {
     this.rollDaily();const m=MISSIONS.find(m=>m.id===id);if(!m)return false;
@@ -162,7 +162,7 @@ export class Progress {
   }
   canPromote(root) {
     const { served, certified } = this.data.career;
-    const advanced = TRAINING.find(skill => skill.requires === root && skill.requires);
+    const advanced = TRAINING.find(skill => skill.requires && skill.requires === root);
     return !this.readOnly && Boolean(advanced) && !certified.includes(root)
       && this.hasSkill(advanced.id) && served >= SERVICE.promotionTargets[this.grade];
   }

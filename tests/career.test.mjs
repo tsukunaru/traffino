@@ -71,7 +71,8 @@ test('eight ordinary story shifts can fund both voluntary promotions, with no du
   assert.equal(restored.promote('unknown'), false);
   data.set(SAVE_KEY, JSON.stringify({version:99}));
   const newer = new Progress({ storage });
-  assert.equal(newer.learn('radio'), false);
+  newer.data.coins = 500; newer.data.career = { served:100, learned:['ledger','dividend'], certified:[] };
+  assert.equal(newer.learn('board'), false);
   assert.equal(newer.promote('ledger'), false);
 });
 
@@ -93,6 +94,7 @@ test('dispatch equipment changes deadlines and awards premiums only on qualifyin
   }
   assert.equal(game.stats.promptPasses, 1);
   assert.equal(p.wages(game.stats), 3*3+SERVICE.premium);
+  assert.equal(p.finish(game).premium, SERVICE.premium);
   p.data.career.served = SERVICE.promotionTargets[0]-1;
   assert.equal(p.promote('ledger'), false);
   p.data.career.served++;

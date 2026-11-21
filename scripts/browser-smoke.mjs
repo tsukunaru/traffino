@@ -39,14 +39,35 @@ try {
     check('standalone origin', await evaluate('location.href==="traffino://game/"'));
     check('local assets only', await evaluate('performance.getEntriesByType("resource").every(r=>r.name.startsWith("traffino:")||r.name.startsWith("data:"))'));
     await shot('steam-menu');
-    await click('[data-action="continue"]'); await click('[data-action="startStory"]');
+    await click('[data-action="settings"]');
+    await evaluate(`(()=>{const e=document.querySelector('[data-setting="language"]');e.value='ru';e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await click('[data-action="back"]');
+    await click('[data-action="continue"]'); await wait('document.querySelector(".mentor-print img")?.naturalWidth===640');
+    check('Miro portrait in packaged briefing',await evaluate('document.querySelector(".mentor-print img").currentSrc.startsWith("traffino://game/")'));
+    await shot('windows-mentor'); await click('[data-action="startStory"]');
     await wait('document.querySelector("#road-0")');
+    await click('#road-1');
+    check('first lesson waits for the correct road',await evaluate('document.querySelector("#road-1").getAttribute("aria-pressed")==="false"'));
     await click('#road-0'); await wait('document.querySelector("#road-0").getAttribute("aria-pressed")==="true"');
-    await wait('Number(document.querySelector("#hud-score").dataset.score)>0'); await shot('steam-game');
+    await wait('Number(document.querySelector("#hud-score").dataset.score)>0');
+    await wait('document.querySelector("#hud-pay").textContent.includes("2")');
+    check('radio lesson advances on first paid car',await evaluate('document.querySelector("#mentor strong").textContent==="Закрой северную дорогу."&&!document.querySelector("#mentor").hidden'));
+    await shot('steam-game');
     await click('[data-action="pause"]'); await click('[data-action="finish"]'); await click('[data-action="confirmFinish"]');
     await wait('document.querySelector(".results")'); check('ad-free results', await evaluate('!document.querySelector("[data-action=rewarded]")'));
     await cdp('Page.reload'); await wait('document.querySelector(".hero")');
     check('progress survives reload', await evaluate(`JSON.parse(localStorage.getItem('${SAVE_KEY}')).runs===1`));
+    // Upgrade an older playtest profile through the packaged UI in this disposable browser profile.
+    const legacy={...freshSave(),version:2,coins:149,story:[2,0,0,0,0,0,0,0],totals:{passed:45},updatedAt:Date.now()+1000};
+    legacy.settings.language='ru';
+    await evaluate(`localStorage.setItem(${JSON.stringify(SAVE_KEY)},${JSON.stringify(JSON.stringify(legacy))})`);
+    await cdp('Page.reload');await wait('document.querySelector(".hero")');await click('[data-action="progress"]');
+    await click('[data-action="learn"][data-value="ledger"]');await click('[data-action="learn"][data-value="dividend"]');
+    await click('[data-action="review"][data-value="ledger"]');
+    check('review quotes balance and next rate',await evaluate('document.querySelector(".promotion-terms").textContent.includes("◈ 5 → 0")&&document.querySelector(".promotion-terms").textContent.includes("◈ 4")'));
+    await shot('windows-promotion');await click('[data-action="confirmPromotion"]');
+    await cdp('Page.reload');await wait('document.querySelector(".hero")');await click('[data-action="progress"]');
+    check('Windows promotion survives restart with medals',await evaluate(`(()=>{const s=JSON.parse(localStorage.getItem('${SAVE_KEY}'));return s.coins===0&&s.story[0]===2&&s.career.certified.join()==='ledger'&&!s.career.learned.length&&document.querySelector('.service-banner h1').textContent==='Старший регулировщик';})()`));
     check('no runtime errors', !errors.length);
     console.log('Windows desktop PASS:', checks);
   } else {
@@ -67,8 +88,14 @@ try {
       await evaluate(`(()=>{const a=__traffino;a.view.setMap(${JSON.stringify(map)});a.view.zoom=.9;a.view.baseAngle=.1;a.game.timeOfDay=.42;})()`);
       await sleep(600); await shot('steam-'+map.id);
     }
+    const equipped=await evaluate(`(()=>{const a=__traffino,v=a.view;v.setMap(${JSON.stringify(INTERSECTIONS[0])},{learned:['radio','dividend'],certified:['board','ledger']});v.render(a.game,.016,a.viewSettings());return v.renderer.info.render.calls;})()`);
+    check('fully equipped station stays within draw budget',equipped<140);
+    await evaluate('__traffino.show("menu");__traffino.action("progress");__traffino.action("postView")');
+    await wait('Math.abs(__traffino.view.currentZoom-__traffino.view.zoom)<.04&&Math.abs(__traffino.view.cameraAngle-(__traffino.view.baseAngle+.42))<.02');
+    await shot('station-detail');
+    await evaluate('__traffino.action("back");__traffino.show("photo")');
     check('low quality reduces triangles',budgets[0].triangles<budgets[1].triangles);
-    const memory=await evaluate(`(()=>{const a=__traffino,v=a.view,g=a.game,maps=${JSON.stringify(INTERSECTIONS)};v.vehiclePreviews();const counts=[];for(let i=0;i<24;i++){v.setMap(maps[i%2]);v.render(g,.016,a.viewSettings());if(i%2)counts.push({...v.renderer.info.memory});}return counts;})()`);check('district swaps and previews keep GPU resources bounded',memory.at(-1).geometries<=memory[0].geometries+1&&memory.at(-1).textures<=memory[0].textures+1);
+    const memory=await evaluate(`(()=>{const a=__traffino,v=a.view,g=a.game,maps=${JSON.stringify(INTERSECTIONS)};v.currentZoom=v.zoom=1;v.cameraAngle=.42;v.baseAngle=0;v.setProjection();v.vehiclePreviews();const counts=[];for(let i=0;i<24;i++){v.setMap(maps[i%2]);v.render(g,.016,a.viewSettings());if(i%2)counts.push({...v.renderer.info.memory});}return counts;})()`);check(`district swaps and previews keep GPU resources bounded: ${JSON.stringify([memory[0],memory.at(-1)])}`,memory.at(-1).geometries<=memory[0].geometries+1&&memory.at(-1).textures<=memory[0].textures+1);
     check('audio unlocked from input',await evaluate('__traffino.audio.ctx?.state==="running"'));await evaluate('__traffino.externalPause("focus",true)');await sleep(100);check('all audio suspended on focus loss',await evaluate('__traffino.audio.ctx.state==="suspended"'));
     check('art no console exceptions',!errors.length);await writeFile('artifacts/visual-report.json',JSON.stringify({checks,budgets,errors,environment:'Chrome headless / SwiftShader, not real hardware FPS'},null,2));console.log('Visual PASS: '+checks.length+' checks');
   }else{
@@ -80,7 +107,13 @@ try {
     if(w===320||w===844)await shot((production?'production':'development')+`-menu-${w}`);
   }
   await viewport(1280,720);
-  await click('[data-action="continue"]');await wait('document.querySelector(".brief")');await click('[data-action="startStory"]');await wait('document.querySelector("#road-0")');
+  await click('[data-action="continue"]');await wait('document.querySelector(".mentor-print img")?.naturalWidth===640');await shot('mentor-briefing');
+  if(!production){
+    await viewport(390,844);await shot('mentor-phone');await viewport(568,320);
+    check('compact briefing reachable without horizontal scroll',await evaluate('document.querySelector(".panel").scrollWidth<=document.querySelector(".panel").clientWidth+1'));
+    await viewport(1280,720);
+  }
+  await click('[data-action="startStory"]');await wait('document.querySelector("#road-0")');
   if(production){check('development APIs excluded',await evaluate('typeof __traffino==="undefined"'));}
   else {await evaluate(`window.__playTest=${playBot.toString()}`);}
   for(const [w,h] of [[320,568],[390,844],[568,320],[844,390],[1024,768],[1280,720],[1280,800],[1920,1080],[2560,1080]]) {
@@ -113,13 +146,40 @@ try {
     for(let shift=0;shift<8;shift++) {
       const result=await evaluate('(()=>{const a=__traffino;__playTest(a.game);return {reason:a.game.reason,medal:a.reward?.medal,coins:a.progress.data.coins};})()');
       check(`browser shift ${shift+1} completion`,result.reason==='complete'&&result.medal>0);await wait('document.querySelector(".results")');
+      if(shift===0){
+        await click('[data-action="progress"]');
+        await wait('document.querySelector(".service-banner")');
+        check('first shift pays for either branch',await evaluate('[...document.querySelectorAll("[data-action=learn]")].filter(b=>!b.disabled).length===2'));
+        await shot('career-first-purchase');
+        await click('[data-action="learn"][data-value="board"]');
+        check('route board charged once and fitted in city',await evaluate('__traffino.view.postSkills.has("board")&&__traffino.progress.data.coins')===result.coins-48);
+        await click('[data-action="back"]');await wait('document.querySelector(".results")');
+      }
       if(shift<7){await click('[data-action="brief"]');await click('[data-action="startStory"]');await wait('__traffino.screen==="gameplay"');}
     }
     await shot('results');await click('[data-action="menu"]');await click('[data-action="challenges"]');await click('[data-action="challengeTab"][data-value="session"]');
     const before=await evaluate('__traffino.progress.data.coins');await click('[data-action="claim"][data-value="cars:session"]');check('session reward claim',await evaluate('__traffino.progress.data.coins')>before);
     await click('[data-action="back"]');await click('[data-action="progress"]');await click('[data-action="buy"][data-value="coral"]');await click('[data-action="map"][data-value="harbor"]');check('cosmetic and district selection',await evaluate('__traffino.progress.data.selectedCosmetic==="coral"&&__traffino.progress.data.map==="harbor"'));
+    await click('[data-action="learn"][data-value="radio"]');await click('[data-action="learn"][data-value="ledger"]');
+    await click('[data-action="learn"][data-value="dividend"]');
+    await click('[data-action="postView"]');await wait('Math.abs(__traffino.view.currentZoom-__traffino.view.zoom)<.04&&Math.abs(__traffino.view.cameraAngle-(__traffino.view.baseAngle+.42))<.02');
+    check('tour shows equipped station',await evaluate('__traffino.view.inspectPost&&__traffino.view.postSkills.size===4'));
+    await shot('duty-station');await click('[data-action="back"]');
+    const purse=await evaluate('__traffino.progress.data.coins');
+    await click('[data-action="review"][data-value="board"]');
+    check('promotion gives cancellation keyboard focus',await evaluate('document.activeElement.dataset.action==="cancelConfirm"'));
+    await click('[data-action="cancelConfirm"]');
+    check('declining keeps savings and restores focus',await evaluate('__traffino.progress.data.coins')===purse&&await evaluate('document.activeElement.dataset.action==="review"'));
+    await click('[data-action="review"][data-value="board"]');await click('[data-action="confirmPromotion"]');
+    check('promotion keeps medals, resets wallet and returns temporary gear',await evaluate('__traffino.progress.grade===1&&__traffino.progress.payRate===3&&__traffino.progress.data.coins===0&&__traffino.progress.data.story.every(Boolean)&&__traffino.view.postSkills.size===1'));
     const saved=await evaluate('JSON.stringify({coins:__traffino.progress.data.coins,story:__traffino.progress.data.story,skin:__traffino.progress.data.selectedCosmetic})');await cdp('Page.reload',{ignoreCache:true});await wait('window.__traffino&&document.querySelector(".hero")');check('save restored after reload',await evaluate('JSON.stringify({coins:__traffino.progress.data.coins,story:__traffino.progress.data.story,skin:__traffino.progress.data.selectedCosmetic})')===saved);
-    for(const mode of ['endless','rush','hardcore']){await click(`[data-action="play"][data-value="${mode}"]`);await wait('__traffino.screen==="gameplay"');check(mode+' mode starts',await evaluate(`__traffino.game.mode===${JSON.stringify(mode)}`));await click('[data-action="pause"]');await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');await wait('document.querySelector(".results")');await click('[data-action="menu"]');}
+    check('certified board survives restart',await evaluate('__traffino.view.postSkills.has("board")&&__traffino.progress.grade===1'));
+    for(const mode of ['endless','rush','hardcore']){await click(`[data-action="play"][data-value="${mode}"]`);await wait('__traffino.screen==="gameplay"');check(mode+' mode starts',await evaluate(`__traffino.game.mode===${JSON.stringify(mode)}`));
+      if(mode==='endless'){
+        const turns=await evaluate(`(()=>{const a=__traffino,g=a.game;g.clearTraffic();g.spawn(0,'car',0).s=12;g.spawn(0,'taxi',2);g.tick();a.ui.updateHUD();return document.querySelector('#road-0 .turn-arrow').textContent;})()`);
+        check('certified board previews actual second vehicle turn',turns==='↑ › ↱');
+      }
+      await click('[data-action="pause"]');await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');await wait('document.querySelector(".results")');await click('[data-action="menu"]');}
     await click('[data-action="settings"]');await click('[data-action="reset"]');await click('[data-action="cancelConfirm"]');check('reset cancellation preserves progress',await evaluate('__traffino.progress.data.story[7]>0'));await click('[data-action="reset"]');await click('[data-action="confirmReset"]');check('confirmed reset',await evaluate('__traffino.progress.data.coins===0&&__traffino.progress.data.story.every(v=>v===0)'));
   }
   if(release){

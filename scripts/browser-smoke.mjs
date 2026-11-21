@@ -10,12 +10,13 @@ import { freshSave,SAVE_KEY } from '../src/progress.js';
 import { VEHICLES,INTERSECTIONS } from '../src/config.js';
 
 const release=process.argv.includes('--release'),production=process.argv.includes('--production')||release,art=process.argv.includes('--art');
-await buildGame(!production);await mkdir('artifacts',{recursive:true});
+const desktop=process.env.TRAFFINO_TEST_EXE;
+if (!desktop) await buildGame(!production);await mkdir('artifacts',{recursive:true});
 const root=resolve('dist'),mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'};
 const server=createServer(async(req,res)=>{try{const path=new URL(req.url,'http://localhost').pathname;if(path==='/sdk.js'){res.writeHead(200,{'content-type':'text/javascript'});res.end('/* local fallback */');return;}if(path==='/favicon.ico'){res.writeHead(204);res.end();return;}const file=resolve(root,'.'+(path==='/'?'/index.html':decodeURIComponent(path)));if(!file.startsWith(root+sep))throw Error('path');res.writeHead(200,{'content-type':mime[extname(file)]??'text/plain','cache-control':'no-store'});res.end(await readFile(file));}catch{res.writeHead(404);res.end();}});
-await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const url=`http://127.0.0.1:${server.address().port}/`,profile=await mkdtemp(join(tmpdir(),'traffino-qa-'));
-const chrome=spawn(process.env.CHROME_PATH||'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',['--headless=new','--no-first-run','--no-default-browser-check','--use-angle=swiftshader','--enable-unsafe-swiftshader','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true,stdio:'ignore'});
+if (!desktop) await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const url=desktop?null:`http://127.0.0.1:${server.address().port}/`,profile=await mkdtemp(join(tmpdir(),'traffino-qa-'));
+const chrome=spawn(desktop||process.env.CHROME_PATH||'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',[...(desktop?['--disable-backgrounding-occluded-windows','--disable-features=CalculateNativeWinOcclusion']:['--headless=new']),'--no-first-run','--no-default-browser-check','--use-angle=swiftshader','--enable-unsafe-swiftshader','--remote-debugging-port=0',`--user-data-dir=${profile}`,...(desktop?[]:['about:blank'])],{windowsHide:true,stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));let socket,cdp,evaluate;const errors=[],checks=[];
 try {
   let endpoint;
@@ -25,12 +26,30 @@ try {
   socket.addEventListener('message',({data})=>{const m=JSON.parse(data);if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description??m.params.exceptionDetails.text);if(m.method==='Runtime.consoleAPICalled'&&m.params.type==='error')errors.push(m.params.args.map(a=>a.value??a.description).join(' '));if(m.id&&pending.has(m.id)){const p=pending.get(m.id);pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}});
   cdp=(method,params={})=>new Promise((resolve,reject)=>{const request=++id;pending.set(request,{resolve,reject,timer:setTimeout(()=>{pending.delete(request);reject(Error('CDP timeout: '+method));},20000)});socket.send(JSON.stringify({id:request,method,params}));});
   evaluate=async expression=>{const r=await cdp('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description??r.exceptionDetails.text);return r.result.value;};
-  const wait=async expression=>{for(let i=0;i<180;i++){if(await evaluate(`Boolean(${expression})`))return;await sleep(60);}throw Error('Timeout: '+expression);};
+  const wait=async expression=>{for(let i=0;i<(desktop?650:180);i++){if(await evaluate(`Boolean(${expression})`))return;await sleep(60);}throw Error('Timeout: '+expression);};
   const click=async selector=>{const point=await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e||e.disabled)throw Error('Unavailable button: '+${JSON.stringify(selector)});e.scrollIntoView({block:'center',inline:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});};
   const shot=async name=>{const image=await cdp('Page.captureScreenshot',{format:'png'});await writeFile('artifacts/'+name+'.png',Buffer.from(image.data,'base64'));};
   const viewport=async(w,h)=>{await cdp('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<h});await sleep(120);await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))');};
   const check=(name,value)=>{assert.ok(value,name);checks.push(name);};
   await cdp('Page.enable');await cdp('Runtime.enable');
+  if (desktop) {
+    await cdp('Page.bringToFront');
+    await cdp('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await wait('document.querySelector(".hero")');
+    check('standalone origin', await evaluate('location.href==="traffino://game/"'));
+    check('local assets only', await evaluate('performance.getEntriesByType("resource").every(r=>r.name.startsWith("traffino:")||r.name.startsWith("data:"))'));
+    await shot('steam-menu');
+    await click('[data-action="continue"]'); await click('[data-action="startStory"]');
+    await wait('document.querySelector("#road-0")');
+    await click('#road-0'); await wait('document.querySelector("#road-0").getAttribute("aria-pressed")==="true"');
+    await wait('Number(document.querySelector("#hud-score").dataset.score)>0'); await shot('steam-game');
+    await click('[data-action="pause"]'); await click('[data-action="finish"]'); await click('[data-action="confirmFinish"]');
+    await wait('document.querySelector(".results")'); check('ad-free results', await evaluate('!document.querySelector("[data-action=rewarded]")'));
+    await cdp('Page.reload'); await wait('document.querySelector(".hero")');
+    check('progress survives reload', await evaluate(`JSON.parse(localStorage.getItem('${SAVE_KEY}')).runs===1`));
+    check('no runtime errors', !errors.length);
+    console.log('Windows desktop PASS:', checks);
+  } else {
   await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`window.__sdkQA={ready:0,starts:0,stops:0,ads:0,saves:0};window.__sdkListeners={};window.YaGames={init:async()=>({environment:{i18n:{lang:'ru'}},serverTime:()=>Date.now(),features:{LoadingAPI:{ready:()=>__sdkQA.ready++},GameplayAPI:{start:()=>__sdkQA.starts++,stop:()=>__sdkQA.stops++}},on:(n,cb)=>__sdkListeners[n]=cb,getPlayer:async()=>({getData:async()=>({}),setData:async()=>{__sdkQA.saves++;}}),isAvailableMethod:async()=>false,adv:{showFullscreenAdv:({callbacks:c})=>{__sdkQA.ads++;c.onOpen();setTimeout(()=>c.onClose(true),20);},showRewardedVideo:({callbacks:c})=>{c.onOpen();c.onRewarded();c.onClose();}}})};`});
   await cdp('Page.addScriptToEvaluateOnNewDocument',{source:'if(location.search.includes("local"))delete window.YaGames;'});
   await viewport(1280,720);await cdp('Page.navigate',{url});await wait('document.querySelector(".hero")');
@@ -42,8 +61,13 @@ try {
     await viewport(1440,900);await click('[data-action="continue"]');await click('[data-action="startStory"]');await evaluate(`(()=>{const a=__traffino,g=a.game;g.director=false;g.clearTraffic();a.show('photo');document.querySelector('#app').classList.add('photo-hidden');const kinds=Object.keys(a.view.models);kinds.forEach((kind,i)=>{const v=g.spawn(i%4,kind,i%3);if(v){v.s=30;v.x=[-1.8,14,1.8,-14][i%4]+(i%4%2?Math.floor(i/4)*4:0);v.z=[-14,-1.8,14,1.8][i%4]+(i%4%2?0:Math.floor(i/4)*4);v.dx=i%4===1?-1:i%4===3?1:0;v.dz=i%4===0?1:i%4===2?-1:0;v.speed=4;}});g.waitingPeople=[3,2,1,2];g.people[0].active=true;Object.assign(g.people[0],{x:1,z:-6.8,t:.5,direction:0});g.signals[0]=true;g.signals[2]=true;})()`);
     const budgets=[];
     for(const [name,time] of [['day',.42],['sunset',.75],['night',.94]]){await evaluate(`__traffino.game.timeOfDay=${time}`);await sleep(250);await shot('city-'+name);}
-    for(const quality of ['low','medium','high']){await evaluate(`__traffino.view.quality('${quality}')`);await sleep(250);const info=await evaluate(`(()=>{const v=__traffino.view;return {quality:'${quality}',calls:v.renderer.info.render.calls,triangles:v.renderer.info.render.triangles,geometries:v.renderer.info.memory.geometries,textures:v.renderer.info.memory.textures,finite:[v.cars,v.lights,v.people].every(m=>Array.from(m.instanceMatrix.array.slice(0,m.count*16)).every(Number.isFinite)),counts:{cars:v.cars.count,lights:v.lights.count,people:v.people.count}}})()`);check(quality+' bounded finite rendering',info.finite&&info.calls<140&&info.counts.cars<=112*55&&info.counts.lights<=112*10);budgets.push(info);await shot('night-'+quality);}
+    for(const quality of ['low','medium','high']){await evaluate(`(()=>{const a=__traffino;a.view.quality('${quality}');a.view.render(a.game,.016,a.viewSettings());})()`);const info=await evaluate(`(()=>{const v=__traffino.view;return {quality:'${quality}',calls:v.renderer.info.render.calls,triangles:v.renderer.info.render.triangles,geometries:v.renderer.info.memory.geometries,textures:v.renderer.info.memory.textures,finite:[v.cars,v.lights,v.people].every(m=>Array.from(m.instanceMatrix.array.slice(0,m.count*16)).every(Number.isFinite)),counts:{cars:v.cars.count,lights:v.lights.count,people:v.people.count}}})()`);check(quality+' bounded finite rendering',info.finite&&info.calls<140&&info.counts.cars<=112*55&&info.counts.lights<=112*10);budgets.push(info);await shot('night-'+quality);}
     await evaluate(`(()=>{const a=__traffino;a.view.quality('medium');a.game.timeOfDay=.42;a.view.zoom=3.2;a.view.baseAngle=.1;})()`);await sleep(500);await shot('vehicle-detail');
+    for (const map of INTERSECTIONS) {
+      await evaluate(`(()=>{const a=__traffino;a.view.setMap(${JSON.stringify(map)});a.view.zoom=.9;a.view.baseAngle=.1;a.game.timeOfDay=.42;})()`);
+      await sleep(600); await shot('steam-'+map.id);
+    }
+    check('low quality reduces triangles',budgets[0].triangles<budgets[1].triangles);
     const memory=await evaluate(`(()=>{const a=__traffino,v=a.view,g=a.game,maps=${JSON.stringify(INTERSECTIONS)};v.vehiclePreviews();const counts=[];for(let i=0;i<24;i++){v.setMap(maps[i%2]);v.render(g,.016,a.viewSettings());if(i%2)counts.push({...v.renderer.info.memory});}return counts;})()`);check('district swaps and previews keep GPU resources bounded',memory.at(-1).geometries<=memory[0].geometries+1&&memory.at(-1).textures<=memory[0].textures+1);
     check('audio unlocked from input',await evaluate('__traffino.audio.ctx?.state==="running"'));await evaluate('__traffino.externalPause("focus",true)');await sleep(100);check('all audio suspended on focus loss',await evaluate('__traffino.audio.ctx.state==="suspended"'));
     check('art no console exceptions',!errors.length);await writeFile('artifacts/visual-report.json',JSON.stringify({checks,budgets,errors,environment:'Chrome headless / SwiftShader, not real hardware FPS'},null,2));console.log('Visual PASS: '+checks.length+' checks');
@@ -115,8 +139,9 @@ try {
   await cdp('Page.navigate',{url:url+'?local'});await wait('document.querySelector(".hero")');check('menu without platform SDK',await evaluate('typeof YaGames==="undefined"'));await click('[data-action="continue"]');await click('[data-action="startStory"]');await wait('document.querySelector("#road-0")');checks.push('gameplay without platform SDK');
   check('no console exceptions',errors.length===0);await writeFile(`artifacts/browser-${release?'release':production?'production':'development'}${process.env.CHROME_PATH?.includes('msedge')?'-edge':''}.json`,JSON.stringify({date:new Date().toISOString(),checks,errors,renderer:'Chromium headless / SwiftShader; layout and behavior verification, not physical GPU profiling'},null,2));console.log(`Browser ${production?'production':'development'} PASS: ${checks.length} checks`);
   }
+  }
 } catch(error) {
-  if(cdp)try{const image=await cdp('Page.captureScreenshot',{format:'png'});await writeFile('artifacts/browser-failure.png',Buffer.from(image.data,'base64'));console.error(await evaluate('document.body.innerText'));}catch{}
+  if(cdp)try{const image=await cdp('Page.captureScreenshot',{format:'png'});await writeFile('artifacts/browser-failure.png',Buffer.from(image.data,'base64'));console.error(await evaluate('({screen:document.body.innerText, hidden:document.hidden, fonts:document.fonts.status, resources:performance.getEntriesByType("resource").map(r=>[r.name,Math.round(r.duration)])})'));}catch{}
   console.error('Console:',errors);throw error;
 } finally {
   socket?.close();chrome.kill();server.close();await sleep(350);

@@ -5,6 +5,7 @@ export function timeout(task,ms=5000) {
 export class Platform {
   constructor(onPause=()=>{}) {this.sdk=null;this.player=null;this.onPause=onPause;this.playing=false;this.pendingSave=null;this.saving=false;this.cloudTimer=null;this.lastAd=0;this.adBusy=false;this.readySent=false;}
   async init() {
+    if (globalThis.location?.protocol === 'traffino:') return;
     try {
       if(!globalThis.YaGames)await timeout(()=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='/sdk.js';s.onload=resolve;s.onerror=reject;document.head.append(s);}));
       if(!globalThis.YaGames)return;
@@ -17,7 +18,7 @@ export class Platform {
       try{this.player=await timeout(()=>this.sdk.getPlayer({scopes:false}),3000);}catch{}
     }catch{this.sdk=null;}
   }
-  language() {return this.sdk?.environment?.i18n?.lang==='en'?'en':'ru';}
+  language() {if (globalThis.location?.protocol === 'traffino:') return navigator.language.startsWith('ru')?'ru':'en';return this.sdk?.environment?.i18n?.lang==='en'?'en':'ru';}
   get rewardedAvailable() {return Boolean(this.sdk?.adv?.showRewardedVideo);}
   get fullscreenAvailable() {return Boolean(this.sdk?.screen?.fullscreen?.request||globalThis.document?.documentElement?.requestFullscreen);}
   async fullscreen() {try{if(this.sdk?.screen?.fullscreen)await this.sdk.screen.fullscreen.request();else await document.documentElement.requestFullscreen();return true;}catch{return false;}}
@@ -29,6 +30,7 @@ export class Platform {
   }
   async load() {try{const data=await timeout(()=>this.player?.getData([SAVE_KEY]),3000);this.cloudLoaded=Boolean(this.player&&data);return data?.[SAVE_KEY]??null;}catch{return null;}}
   queueSave(value) {
+    if (!this.player || !this.cloudLoaded) return;
     this.pendingSave=value;
     if(!this.cloudTimer)this.cloudTimer=setTimeout(()=>{this.cloudTimer=null;void this.flush();},5000);
   }

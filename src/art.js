@@ -71,6 +71,12 @@ function building(v,parent,x,z,w,h,d,color,shop='',tower=false) {
     for(const side of [-1,1]){const win=box(side*(w/2+.04),y,0,.13,1.35,d*.46,PALETTE.plum);win.material=v.windowMaterial;box(side*(w/2+.08),y-.76,0,.3,.12,d*.51,PALETTE.cream);}
     if(row%2===0&&!tower){box(w*.23,y-.84,front+.34,.92,.56,.54,PALETTE.white);v.mesh(g,'cylinder',w*.23,y-.84,front+.64,.35,.055,.35,0x897577,Math.PI/2);}
   }
+  // Glazed rooflights and narrow brass mullions catch the afternoon light.
+  if(w>=6 && !shop) {
+    box(0,h+.49,d*.18,w*.38,.24,1.29,PALETTE.cream);
+    box(0,h+.65,d*.18,w*.34,.14,1.11,PALETTE.glass);
+    for(const offset of [-.1,0,.1])box(w*offset,h+.735,d*.18,.075,.035,1.12,PALETTE.cream);
+  }
   box(w*.25,h+1.0,-d*.18,.98,1.3,1.05,color);box(w*.25,h+1.68,-d*.18,1.18,.14,1.21,PALETTE.cream);
   box(-w*.25,h+.48,-d*.16,1.18,.45,.82,0xb0b9ac);
   if(tower){v.mesh(g,'cylinder',-w*.22,h+1.08,d*.20,.07,1.2,.07,PALETTE.cream);const dish=v.mesh(g,'sphere',-w*.22,h+1.57,d*.20,.75,.17,.75,PALETTE.white);dish.rotation.z=.7;}
@@ -90,6 +96,81 @@ function building(v,parent,x,z,w,h,d,color,shop='',tower=false) {
       v.mesh(g,'cylinder',0,h+.55,.15,1.85,.12,1.85,PALETTE.cream);v.mesh(g,'cylinder',0,h+1.1,.15,1.24,1.1,1.24,PALETTE.white);v.mesh(g,'cylinder',0,h+1.68,.15,1.37,.12,1.37,PALETTE.cream);v.mesh(g,'cylinder',0,h+1.75,.15,1.06,.035,1.06,0x6a4439);v.mesh(g,'torus',.78,h+1.16,.15,.83,.85,.65,PALETTE.cream);
     }
     if(shop==='MARKET')for(const side of [-1,1]){const cx=side*w*.32;box(cx,.47,front+.87,1.55,.67,.85,0xb98755);box(cx,.86,front+.93,1.38,.1,.72,PALETTE.cream);for(let k=0;k<6;k++)v.mesh(g,'sphere',cx+(k%3-1)*.36,1.02,front+.78+Math.floor(k/3)*.31,.32,.33,.32,side<0?0xe79755:0xa5bb64);}
+  }
+}
+
+function clockHall(v, g, x, z) {
+  const p = PALETTE;
+  building(v, g, x, z, 7, 6.4, 5.8, p.mint);
+  v.box(g, x, 8.6, z, 3.5, 4.6, 3.5, p.coral);
+  for (const angle of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const face = new THREE.Group();
+    face.position.set(x, 9, z); face.rotation.y = angle; g.add(face);
+    v.mesh(face, 'cylinder', 0, 0, 1.80, 2.65, .18, 2.65, p.ink, Math.PI/2);
+    v.mesh(face, 'cylinder', 0, 0, 1.94, 2.30, .13, 2.30, p.cream, Math.PI/2);
+    for(let hour=0;hour<12;hour++){
+      const mark=hour*Math.PI/6;
+      v.box(face,.94*Math.sin(mark),.94*Math.cos(mark),2.03,.09,.20,.07,p.plum).rotation.z=-mark;
+    }
+    v.box(face, -.19, .18, 2.09, .13, .63, .08, p.ink).rotation.z=.80;
+    v.box(face, .29, .24, 2.14, .11, .85, .07, p.ink).rotation.z=-.90;
+  }
+  for (let level=0;level<4;level++) {
+    const width=4.4-level*.85;
+    v.box(g,x,11.15+level*.49,z,width,.55,width,p.glass);
+  }
+  v.mesh(g,'sphere',x,13.1,z,.68,.72,.68,p.yellow);
+}
+
+function drawQuay(v, g, e) {
+  const p = PALETTE;
+  // The east approach continues over a causeway between the two basins.
+  for (const side of [-1, 1]) {
+    const length = e - 5.4;
+    const center = side * (5.4 + length / 2);
+    v.box(g,e-3,.24,center,5.9,.18,length,0x42989f);
+    for(let i=0;i<9;i++){
+      const z=side*(6.6+i*2.3);
+      v.box(g,e-1.5-(i%3)*1.2,.35,z,i%2?.85:1.4,.035,.10,0x9bd6cb);
+    }
+    for(let z=6.2;z<e-1;z+=3.1) {
+      v.box(g,e-6.15,.83,side*z,.24,1.28,.24,p.cream);
+      if(z+3.1<e-1)v.box(g,e-6.15,1.25,side*(z+1.55),.15,.12,3.12,p.glass);
+    }
+  }
+  const x=e-3, z=-19;
+  v.mesh(g,'cylinder',x,.60,z,4.2,.52,4.2,p.stone);
+  for(let i=0;i<5;i++){
+    const diameter=2.65-.19*i;
+    v.mesh(g,'cylinder',x,1.4+1.1*i,z,diameter,1.13,diameter,i%2?p.coral:p.white);
+  }
+  v.mesh(g,'cylinder',x,6.65,z,2.55,.25,2.55,p.ink);
+  v.mesh(g,'cylinder',x,7.28,z,1.55,1.1,1.55,p.yellow).material=v.lampMaterial;
+  for(const offset of [-.81,.81])v.box(g,x+offset,7.28,z,.16,1.2,.15,p.ink);
+  v.mesh(g,'cylinder',x,8,z,2.45,.34,2.45,p.coral);
+  for(let plank=0;plank<13;plank++)
+    v.box(g,e-5.25,.67,11.2+plank*.49,1.65,.25,.47,plank%3?p.stone:0xbe8562);
+  for(const postZ of [11.1,14.1,17.1])
+    v.mesh(g,'cylinder',e-4.48,.72,postZ,.32,1.35,.32,p.glass);
+  const boatX=e-2.7, boatZ=14;
+  v.mesh(g,'sphere',boatX,.71,boatZ,2.75,1.15,6.25,p.glass);
+  v.box(g,boatX,1.19,boatZ,2.3,.31,4.9,p.cream);
+  v.box(g,boatX,1.93,boatZ+.6,1.72,1.22,1.98,p.mint);
+  v.box(g,boatX,2.15,boatZ+1.61,1.42,.50,.08,p.glass);
+  v.box(g,boatX,2.64,boatZ+.60,2.03,.20,2.23,p.coral);
+  v.mesh(g,'cylinder',boatX,2.2,boatZ-1.0,.59,1.55,.59,p.ink);
+  v.mesh(g,'cylinder',boatX,2.90,boatZ-1.0,.66,.30,.66,p.yellow);
+  const craneX=15;
+  for(const offset of [-1.4,1.4]) {
+    v.box(g,craneX+offset,3.5,-18,.65,7,.8,p.yellow);
+    v.box(g,craneX,3.6,-18,.27,6.6,.38,p.yellow).rotation.z=offset>0?.42:-.42;
+  }
+  v.box(g,craneX+2.5,7.1,-18,9.8,.7,1.2,p.yellow);
+  v.box(g,craneX-1.3,7.9,-18,2.0,1.45,1.7,p.glass);
+  v.box(g,craneX+6.6,5.6,-18,.12,2.5,.12,p.ink);
+  for(const [cx,cy,cz,color] of [[16,1.15,-11,p.mint],[16,1.15,-14,p.coral],[16,3.05,-14,p.yellow],[20.1,4.1,-18,p.coral]]) {
+    v.box(g,cx,cy,cz,4.6,1.85,2.1,color);
+    for(let rib=-2;rib<=2;rib+=.5)v.box(g,cx+rib,cy,cz+1.06,.10,1.6,.12,color);
   }
 }
 
@@ -113,6 +194,7 @@ export function buildCity(v) {
       const pos=new THREE.Vector3(-map.width/2-.68,.23,z).applyAxisAngle(v.up,-d*Math.PI/2);v.lampPositions.push(pos);
     }
     for(let i=0;i<2;i++){
+      if (map.id==='harbor' && d===1 && i===1) continue; // Container yard.
       const x=-7.5-i*3.8,z=-11.5-i*4.6;
       v.box(q,x,.36,z,2.6,.43,2.5,0xd4b793);v.box(q,x,.6,z,2.3,.08,2.2,0x83995e);
       v.mesh(q,'cylinder',x,1.35,z,.26,1.7,.26,0x9c7756);
@@ -125,23 +207,49 @@ export function buildCity(v) {
     v.box(q,-8.7,.52,-19.5,.55,.52,.5,0xdcb585);v.box(q,-8.7,.80,-19.5,.12,.025,.5,P.cream);
     for(let i=0;i<3;i++)v.mesh(q,'sphere',-12.5+i*.42,.63,-7.25,.32,.45,.32,i%2?0xdd957c:0xebc569);
   }
-  building(v,g,-16,-18,7,8.2,6.2,P.mint,'',false);
+  if(map.id==='harbor')building(v,g,-16,-18,7,6.2,6.2,P.glass,'DOCK');
+  else {
+    clockHall(v,g,-16,-18);
+    // A two-tier fountain and four flower beds in front of the town hall.
+    const x=-16, z=-10;
+    v.box(g,x,.17,z,10,.19,7.2,0xa7bc88);
+    v.mesh(g,'cylinder',x,.36,z,6.4,.34,5.8,P.stone);
+    v.mesh(g,'cylinder',x,.67,z,4.9,.56,4.9,P.cream);
+    v.mesh(g,'cylinder',x,.97,z,4.35,.11,4.35,0x70b5c5);
+    v.mesh(g,'cylinder',x,1.51,z,.70,1.14,.70,P.cream);
+    v.mesh(g,'cylinder',x,2.08,z,2.25,.30,2.25,P.cream);
+    v.mesh(g,'sphere',x,2.46,z,.40,.78,.40,0x9bd6cb);
+    for (const side of [-1,1]) for (const end of [-1,1]) {
+      const bedX=x+side*2.85, bedZ=z+end*2.05;
+      v.box(g,bedX,.43,bedZ,1.8,.42,1.35,P.cream);
+      v.mesh(g,'sphere',bedX,.72,bedZ,1.7,.65,1.28,0x80a778);
+      for(let petal=0;petal<3;petal++)v.mesh(g,'sphere',bedX-.48+petal*.45,.98,bedZ+(petal%2)*.22,.35,.28,.35,end<0?P.yellow:P.coral);
+    }
+  }
   building(v,g,-23,-10,4.6,5.5,5.5,P.lime);
   building(v,g,-8.9,-22.2,4.4,5.5,5.3,P.coral);
-  building(v,g,15,-19.8,6.9,10,6.1,0xc9b28b,'',true);
-  building(v,g,22,-10.5,5.6,7.8,6.3,P.coral);
+  if (map.id === 'harbor') drawQuay(v,g,e);
+  else {
+    building(v,g,15,-19.8,6.9,10,6.1,0xc9b28b,'',true);
+    building(v,g,22,-10.5,5.6,7.8,6.3,P.coral);
+  }
   building(v,g,8.5,-22.6,4.4,5.3,4.6,P.yellow);
   building(v,g,-17.5,17.5,8.3,4.5,6.7,P.coral,'PIZZA');
   building(v,g,-23,9.1,4.5,4.2,4.2,P.yellow,'CAFE');
   building(v,g,16.7,18.3,7.2,5.8,6.4,P.mint,'MARKET');
-  building(v,g,22.7,9.4,4.3,4.2,5.2,0xd99488);
+  if(map.id!=='harbor')building(v,g,22.7,9.4,4.3,4.2,5.2,0xd99488);
+  // Separate the shop terraces from the pavement using laid stone and parasols.
+  for(const x of [-20.7,-18.8,-16.9,-15,-13.1])
+    for(const z of [10.1,12,13.9])v.box(g,x,.13,z,1.86,.13,1.86,0xd7ba98);
+  for(const x of [-21,-19]){
+    v.mesh(g,'cylinder',x,1.53,12,.12,2.6,.12,P.ink);
+    v.mesh(g,'sphere',x,2.82,12,2.2,.57,2.2,x===-21?P.coral:P.yellow);
+    for(const offset of [-.85,.85])v.box(g,x,.65,12+offset,.54,.83,.56,P.mint);
+  }
   // The supplied street-prop sheet informs this small bus shelter; keep it off the road.
   for(const z of [-14.8,-10.8])v.box(g,7.5,1.55,z,.15,2.6,.15,P.mint);
   v.box(g,7.5,2.96,-12.8,1.65,.24,4.5,P.mint);v.box(g,8.12,1.5,-12.8,.12,2.7,4.1,0xb5d2c7);
   v.box(g,7.8,.85,-12.8,.66,.18,3,0xcb9571);v.sign(g,'BUS',7.48,2.45,-10.61,1,.38,'#fff3d2');
   for(const x of [-21,-19]){v.mesh(g,'cylinder',x,.7,12,.15,1,.15,P.cream);v.mesh(g,'cylinder',x,1.2,12,1.25,.12,1.25,P.cream);}
-  if(map.id==='harbor'){
-    v.box(g,e-2,.27,0,3.4,.16,e*2,0x70b5c5);
-    for(let z=-e+1;z<e;z+=3){v.box(g,e-4,.77,z,.16,1.1,.16,P.cream);v.box(g,e-4,1.16,z,.16,.12,3.1,P.cream);}
-  }
+
 }

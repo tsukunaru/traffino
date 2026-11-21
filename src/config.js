@@ -10,6 +10,7 @@ export const BALANCE = {
   dayDuration: 180, rushDuration: 150, rushDensity: .58, emergencyTimer: 24,
   eventWarning: 4, eventDuration: 16, eventInterval: 38,
   flowGain: 0.12, flowDecay: 0.014, flowMax: 5, timelyWait: 12,
+  circuitBonus: 120,
   score: { car: 30, bus: 70, emergency: 160, pedestrian: 15, day: 200, event: 100 },
   reputationPerCar: 2, coinsPerCar: 2, completionCoins: 30,
   emergencyReputation: 10, emergencyPenalty: 80, collisionPenalty: 100,

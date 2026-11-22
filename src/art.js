@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { VEHICLES } from './config.js';
+import { VEHICLES, SERVICE } from './config.js';
 
 export const PALETTE={cream:0xffe7b0,stone:0xe8cfa4,road:0x656974,ink:0x333c50,glass:0x476674,coral:0xde7058,mint:0x72b8ac,yellow:0xebbc55,lime:0xb8bd67,plum:0x785463,white:0xfff3d2};
 // Eight keyframes, with the final midnight repeating the first for a seamless day.
@@ -295,10 +295,21 @@ function dutyStation(v, city) {
     box(-.86,1.88,1.63,.79,.38,.51,p.ink);
     for(const x of [-1.10,-.96,-.82])box(x,1.9,1.90,.045,.18,.06,p.cream);
   }
+  if(v.postSkills.has('survey')){
+    box(2.82,.92,1.5,.13,1.75,.13,p.ink);
+    box(2.82,1.84,1.5,1.2,.92,.12,p.cream);
+    box(2.82,1.84,1.59,.16,.71,.06,p.glass);
+    box(2.82,1.8,1.6,1.05,.13,.06,p.glass);
+  }
+  if(v.postSkills.has('crew')){
+    box(-1.12,.49,2.62,.95,.58,.56,p.coral);
+    box(-1.12,.82,2.62,1,.13,.58,p.yellow);
+    box(-1.12,.94,2.62,.39,.10,.13,p.ink);
+  }
   if(v.postSkills.has('dividend')){
     box(.74,.98,1.78,1.65,.72,.14,p.glass);
     box(.74,1.02,1.88,1.44,.55,.07,p.yellow);
-    v.sign(booth,'+2',.74,1.03,1.93,1.38,.52,'#343f44');
+    v.sign(booth,'+'+SERVICE.premium,.74,1.03,1.93,1.38,.52,'#343f44');
   }
 }
 

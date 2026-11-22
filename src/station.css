@@ -43,8 +43,12 @@
 .service-facts b {font-size:23px;line-height:1.1;color:#ffdda0;font-variant-numeric:tabular-nums}.service-facts em {font:inherit;opacity:.75}
 .service-facts small {color:#e1ebd9;font-size:12px;font-weight:750}
 .post-tour,.post-label button {position:relative;z-index:1;min-height:36px;background:#f4e5c0;color:#2e4a40;font-size:13px;font-weight:850;border:1px solid #c4ad84;border-radius:9px}
-.skill-tree {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:18px 0}
+.skill-tree {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin:18px 0}
 .skill-branch {--branch:#3c6b5d;--light:#d6e7d7;border:1px solid #c6b69b;border-radius:13px;background:#fff9eb;overflow:hidden}
+#detour {pointer-events:auto;max-width:39%;padding:7px 10px;border:2px solid #6c512f;border-radius:9px;background:#ffda86;color:#3c342c;font-weight:850;line-height:1.2}
+#detour[hidden]{display:none}
+.settlement-note {font-weight:800;color:#3d5145}
+.branch-survey {--branch:#725320;--light:#f5e0a0}
 .branch-ledger {--branch:#8a4b34;--light:#f5ddbf}
 .skill-branch>h2 {margin:0;padding:10px 17px;background:var(--light);color:var(--branch);font-size:18px;font-weight:950}
 .skill-branch ol {list-style:none;margin:0;padding:17px 14px}

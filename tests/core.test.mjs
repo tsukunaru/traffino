@@ -81,6 +81,34 @@ test('events warn, activate, finish; termination does not tick events again',()=
   const g=isolated();g.triggerEvent('wave',2);assert.equal(g.event.phase,'warning');run(g,4.1);assert.equal(g.event.phase,'active');assert.equal(g.waitingPeople[2],8);run(g,17);assert.equal(g.event,null);assert.equal(g.stats.eventsCompleted,1);
   g.triggerEvent('surge',0);g.end('quit');const time=g.time;run(g,30);assert.equal(g.time,time);
 });
+test('work crews wait for the outgoing lane to drain and dispatch gear shortens the closure',()=>{
+  for(const map of INTERSECTIONS){
+    const g=isolated({map,survey:true,crew:true}),outgoing=g.spawn(0,'bus',0);
+    g.signals[0]=true;
+    run(g,4.9);
+    assert.ok(outgoing.committed);
+    g.triggerEvent('works',outgoing.route.exit);
+    assert.equal(g.event.remaining,8);
+    g.updateEvent(8);assert.equal(g.event.phase,'clearing');
+    const incoming=g.spawn(0,'car',0);assert.ok(!g.destinationClear(incoming));
+    g.updateEvent(.1);assert.equal(g.event.phase,'clearing');
+    run(g,5);assert.equal(g.event.phase,'active');assert.ok(g.event.remaining<=13);
+    run(g,15);assert.equal(g.event,null);assert.ok(incoming.committed||!incoming.active);
+  }
+});
+
+test('a works detour reroutes only the offered lead car and still requires a green signal',()=>{
+  const g=isolated();g.triggerEvent('works',2);g.updateEvent(4);g.updateEvent(.1);
+  const car=g.spawn(0,'car',0);run(g,6);
+  const next=g.spawn(0,'taxi',0);run(g,3);
+  const offer=g.detourOption();
+  assert.equal(offer.car,car);assert.notEqual(offer.route.exit,2);
+  g.command({type:'detour',direction:next.serial});assert.equal(car.route.exit,2);
+  g.command({type:'detour',direction:car.serial});run(g,.2);
+  assert.equal(car.route,offer.route);assert.equal(car.committed,false);assert.equal(next.route.exit,2);
+  g.command({type:'toggle',direction:0});run(g,2);assert.ok(car.committed);
+});
+
 test('flow, scores, difficulty and medals have meaningful independent criteria',()=>{
   assert.ok(flowAfter(1,2)>flowAfter(1,40));assert.equal(flowAfter(5,0,true),5);
   assert.ok(passScore(VEHICLES.bus,2,true,'endless')>passScore(VEHICLES.car,2,true,'endless'));
@@ -102,7 +130,7 @@ test('progress settlement is incremental; rewards, purchases and claims cannot r
   const storage=memory(),p=new Progress({storage,now:()=>1800000000000}),g=isolated({mode:'story'});g.stats.passed=200;g.stats.maxFlow=5;
   p.sync(g.stats,'story');const coins=p.data.coins;p.sync(g.stats,'story');assert.equal(p.data.coins,coins);
   assert.ok(p.claim('cars'));const rewarded=p.data.coins;assert.ok(!p.claim('cars'));assert.equal(p.data.coins,rewarded);
-  assert.ok(p.buy('coral'));const purchased=p.data.coins;p.buy('coral');assert.equal(p.data.coins,purchased);
+  assert.equal(p.data.coins,0);g.end('complete');p.finish(g);assert.ok(p.buy('coral'));const purchased=p.data.coins;p.buy('coral');assert.equal(p.data.coins,purchased);
   const restored=new Progress({storage});assert.equal(restored.data.coins,p.data.coins);assert.ok(restored.data.cosmetics.includes('coral'));
   assert.ok(p.claim('cars',true));assert.ok(!p.claim('cars',true));
   assert.ok(p.claim('cars','session'));assert.ok(!p.claim('cars','session'));p.start();assert.deepEqual(p.data.session.claimed,[]);assert.equal(p.data.session.progress.passed,undefined);
@@ -133,13 +161,25 @@ test('onboarding does not spend the shift timer while the first instructions are
 });
 test('endless crosses multiple days; rush ends on its configured timer',()=>{
   const endless=isolated();run(endless,400);assert.equal(endless.day,3);assert.equal(endless.stats.nights,2);assert.ok(endless.running);
-  const rush=isolated({mode:'rush'});run(rush,151);assert.equal(rush.reason,'complete');assert.ok(Math.abs(rush.time-150)<.02);
+  const rush=isolated({mode:'rush'});run(rush,151);assert.equal(rush.reason,'goal');assert.ok(Math.abs(rush.time-150)<.02);
 });
 test('seeded fixed-step traffic is reproducible and object pools are bounded',()=>{
   const a=new Simulation({mode:'endless',seed:333}),b=new Simulation({mode:'endless',seed:333});run(a,10);run(b,10);assert.deepEqual(a.stats,b.stats);assert.deepEqual(a.vehicles.map(v=>[v.active,v.s,v.kind]),b.vehicles.map(v=>[v.active,v.s,v.kind]));assert.equal(a.vehicles.length,B.capacity);assert.equal(a.people.length,B.pedestrianCapacity);
 });
-test('reckless drivers have a bounded, warned reaction delay',()=>{
-  const events=[],g=isolated({emit:name=>events.push(name)}),v=g.spawn(0,'reckless',0);run(g,7);g.command({type:'toggle',direction:0});g.command({type:'toggle',direction:0});run(g,.3);assert.ok(events.includes('reckless'));assert.ok(v.committed);assert.ok(v.s>v.route.entry-B.stopMargin-v.length/2);
+test('a warned runner can be held at red or can cause a real crossing collision',()=>{
+  for(const intervene of [false,true]){
+    const events=[],g=isolated({emit:name=>events.push(name)}),runner=g.spawn(0,'reckless',0);
+    while(runner.runnerAt===null && g.time<10)g.tick();
+    assert.ok(events.includes('reckless'));assert.ok(runner.runnerAt-g.time>=3.99);
+    const cross=g.spawn(1,'car',0);run(g,3.4);
+    assert.equal(runner.committed,false);
+    if(intervene)g.command({type:'stopAll'});
+    g.command({type:'toggle',direction:1});run(g,5);
+    assert.equal(g.stats.collisions,intervene?0:1);
+    assert.equal(runner.committed,!intervene);
+    if(intervene){assert.ok(cross.committed);assert.equal(runner.runnerAt,null);}
+    else {assert.equal(runner.state,'Crashed');assert.ok(cross.crashLeft>0);}
+  }
 });
 
 // A deliberately conservative player bot: inspect only public game state, clear an approach,

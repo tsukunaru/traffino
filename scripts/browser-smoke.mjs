@@ -24,7 +24,7 @@ try {
   assert.ok(endpoint,'Chrome debugging endpoint');socket=new WebSocket(endpoint);await new Promise((r,j)=>{socket.addEventListener('open',r,{once:true});socket.addEventListener('error',j,{once:true});});
   let id=0;const pending=new Map();
   socket.addEventListener('message',({data})=>{const m=JSON.parse(data);if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description??m.params.exceptionDetails.text);if(m.method==='Runtime.consoleAPICalled'&&m.params.type==='error')errors.push(m.params.args.map(a=>a.value??a.description).join(' '));if(m.id&&pending.has(m.id)){const p=pending.get(m.id);pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}});
-  cdp=(method,params={})=>new Promise((resolve,reject)=>{const request=++id;pending.set(request,{resolve,reject,timer:setTimeout(()=>{pending.delete(request);reject(Error('CDP timeout: '+method));},20000)});socket.send(JSON.stringify({id:request,method,params}));});
+  cdp=(method,params={})=>new Promise((resolve,reject)=>{const request=++id;pending.set(request,{resolve,reject,timer:setTimeout(()=>{pending.delete(request);reject(Error('CDP timeout: '+method));},method==='Page.captureScreenshot'?60000:20000)});socket.send(JSON.stringify({id:request,method,params}));});
   evaluate=async expression=>{const r=await cdp('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description??r.exceptionDetails.text);return r.result.value;};
   const wait=async expression=>{for(let i=0;i<(desktop?650:180);i++){if(await evaluate(`Boolean(${expression})`))return;await sleep(60);}throw Error('Timeout: '+expression);};
   const click=async selector=>{const point=await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e||e.disabled)throw Error('Unavailable button: '+${JSON.stringify(selector)});e.scrollIntoView({block:'center',inline:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});};
@@ -50,7 +50,7 @@ try {
     await click('[data-action="continue"]'); await wait('document.querySelector(".mentor-print img")?.naturalWidth===640');
     check('Miro portrait in packaged briefing',await evaluate('document.querySelector(".mentor-print img").currentSrc.startsWith("traffino://game/")'));
     await shot('windows-mentor');await click('[data-action="reply"][data-value="duty"]');
-    check('player can ask about pay before accepting',await evaluate('document.querySelector(".speech-balloon").textContent.includes("2 ◈")&&!!document.querySelector(".your-line")'));
+    check('player can ask about pay before accepting',await evaluate('document.querySelector(".speech-balloon").textContent.includes("1 ◈")&&!!document.querySelector(".your-line")'));
     await enterShift();
     await wait('document.querySelector("#road-0")');
     check('first frame includes the mentor and road state',await evaluate('document.querySelector("#road-1").getAttribute("aria-pressed")==="false"&&document.querySelector("#mentor strong").textContent==="Открой северную дорогу."'));
@@ -58,22 +58,41 @@ try {
     check('first lesson waits for the correct road',await evaluate('document.querySelector("#road-1").getAttribute("aria-pressed")==="false"'));
     await click('#road-0'); await wait('document.querySelector("#road-0").getAttribute("aria-pressed")==="true"');
     await wait('Number(document.querySelector("#hud-score").dataset.score)>0');
-    await wait('document.querySelector("#hud-pay").textContent.includes("2")');
-    check('radio lesson advances on first paid car',await evaluate('document.querySelector("#mentor strong").textContent==="Закрой северную дорогу."&&!document.querySelector("#mentor").hidden'));
+    await wait('document.querySelector("#hud-pay").textContent.includes("1")');
+    check('radio lesson advances on the first recorded car',await evaluate('document.querySelector("#mentor strong").textContent==="Закрой северную дорогу."&&!document.querySelector("#mentor").hidden'));
     await shot('steam-game');
     await click('[data-action="pause"]'); await click('[data-action="finish"]'); await click('[data-action="confirmFinish"]');
     await wait('document.querySelector(".results")'); check('ad-free results', await evaluate('!document.querySelector("[data-action=rewarded]")'));
     await cdp('Page.reload'); await wait('document.querySelector(".hero")');
-    check('progress survives reload', await evaluate(`JSON.parse(localStorage.getItem('${SAVE_KEY}')).runs===1`));
+    check('abandoning a shift preserves its records but pays zero', await evaluate(`(()=>{const s=JSON.parse(localStorage.getItem('${SAVE_KEY}'));return s.runs===1&&s.totals.passed>=1&&s.coins===0&&s.career.served===0})()`));
+    // Play a full first shift against the release HUD. Input follows its clock just like a player.
+    await click('[data-action="settings"]');
+    await evaluate(`(()=>{const q=document.querySelector('[data-setting="quality"]');q.value='low';q.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await click('[data-action="back"]');await click('[data-action="continue"]');await enterShift();
+    await click('#road-0');await wait('Number(document.querySelector("#hud-score").dataset.score)>0');
+    await click('#road-0');await wait('document.querySelector("#road-0").getAttribute("aria-pressed")==="false"');
+    await click('#road-1');await wait('document.querySelector("#road-1").getAttribute("aria-pressed")==="true"');
+    await evaluate(`(()=>{let previous=-1;function operate(){
+      const clock=document.querySelector('#hud-time');if(!clock)return;
+      const [m,s]=clock.textContent.split(':').map(Number),elapsed=60-m*60-s;
+      if(elapsed!==previous){previous=elapsed;for(let d=0;d<4;d++){
+        const b=document.querySelector('#road-'+d),go=elapsed%10<6&&d%2===1-Math.floor(elapsed/10)%2;
+        if((b.getAttribute('aria-pressed')==='true')!==go)b.click();
+      }}requestAnimationFrame(operate);
+    }operate();})()`);
+    const deadline=Date.now()+240000;
+    while(!await evaluate('!!document.querySelector(".results")')&&Date.now()<deadline)await sleep(500);
+    check('completed shift pays the displayed total into the saved wallet',await evaluate(`(()=>{const s=JSON.parse(localStorage.getItem('${SAVE_KEY}')),coins=document.querySelector('.result-grid div:last-child strong');return s.story[0]>0&&s.career.served>=5&&s.coins===Number(coins?.textContent)&&s.coins>s.career.served;})()`));
+    await shot('windows-paid-duty');
     // Upgrade an older playtest profile through the packaged UI in this disposable browser profile.
-    const legacy={...freshSave(),version:2,coins:149,story:[2,0,0,0,0,0,0,0],totals:{passed:45},updatedAt:Date.now()};
+    const legacy={...freshSave(),version:2,coins:149,story:[2,0,0,0,0,0,0,0],totals:{passed:90},updatedAt:Date.now()};
     legacy.settings.language='ru';
     const previousBoot=await evaluate('performance.timeOrigin');
     await evaluate(`localStorage.setItem(${JSON.stringify(SAVE_KEY)},${JSON.stringify(JSON.stringify(legacy))})`);
     await cdp('Page.reload');await wait(`performance.timeOrigin>${previousBoot}&&document.querySelector(".hero")`);await click('[data-action="progress"]');
     await click('[data-action="learn"][data-value="ledger"]');await click('[data-action="learn"][data-value="dividend"]');
     await click('[data-action="review"][data-value="ledger"]');
-    check('review quotes balance and next rate',await evaluate('document.querySelector(".promotion-terms").textContent.includes("◈ 5 → 0")&&document.querySelector(".promotion-terms").textContent.includes("◈ 4")'));
+    check('review quotes balance and next rate',await evaluate('document.querySelector(".promotion-terms").textContent.includes("◈ 5 → 0")&&document.querySelector(".promotion-terms").textContent.includes("◈ 3")'));
     await shot('windows-promotion');await click('[data-action="confirmPromotion"]');
     await cdp('Page.reload');await wait('document.querySelector(".hero")');await click('[data-action="progress"]');
     check('Windows promotion survives restart with medals',await evaluate(`(()=>{const s=JSON.parse(localStorage.getItem('${SAVE_KEY}'));return s.coins===0&&s.story[0]===2&&s.career.certified.join()==='ledger'&&!s.career.learned.length&&document.querySelector('.service-banner h1').textContent==='Старший регулировщик';})()`));
@@ -88,8 +107,18 @@ try {
   if(art){
     await wait('window.__traffino');await evaluate('document.querySelector(".debug-panel").hidden=true');await shot('visual-menu');await shot('town-menu','webp');
     for(const [w,h] of [[320,568],[390,844],[568,320],[844,390],[1024,768],[1280,720],[1920,1080]]){await viewport(w,h);check(`art menu fits ${w}x${h}`,await evaluate(`(()=>{const a=document.querySelector('.start').getBoundingClientRect(),b=document.querySelector('.mode-grid').getBoundingClientRect(),c=document.querySelector('.menu-bottom').getBoundingClientRect();return a.bottom<=b.top&&b.bottom<=c.top&&c.bottom<=innerHeight;})()`));if(w===390||w===568)await shot('visual-menu-'+w);}
-    await viewport(1440,900);await click('[data-action="continue"]');await enterShift();await evaluate(`(()=>{const a=__traffino,g=a.game;g.director=false;g.clearTraffic();a.show('photo');document.querySelector('#app').classList.add('photo-hidden');const kinds=Object.keys(a.view.models);kinds.forEach((kind,i)=>{const v=g.spawn(i%4,kind,i%3);if(v){v.s=30;v.x=[-1.8,14,1.8,-14][i%4]+(i%4%2?Math.floor(i/4)*4:0);v.z=[-14,-1.8,14,1.8][i%4]+(i%4%2?0:Math.floor(i/4)*4);v.dx=i%4===1?-1:i%4===3?1:0;v.dz=i%4===0?1:i%4===2?-1:0;v.speed=4;}});g.waitingPeople=[3,2,1,2];g.people[0].active=true;Object.assign(g.people[0],{x:1,z:-6.8,t:.5,direction:0});g.signals[0]=true;g.signals[2]=true;})()`);
+    await viewport(1440,900);await click('[data-action="continue"]');await enterShift();await evaluate(`(()=>{const a=__traffino,g=a.game;g.director=false;g.clearTraffic();g.tutorial=4;a.show('photo');document.querySelector('#app').classList.add('photo-hidden');g.spawn(2,'taxi',0);for(let i=0;i<180;i++)g.tick();g.timeOfDay=.41;})()`);
     const budgets=[];
+    await evaluate(`(()=>{const a=__traffino,g=a.game;g.triggerEvent('works',2);a.view.render(g,0,a.viewSettings());a.photoSetting('subject',3);})()`);
+    await wait('Math.abs(__traffino.view.currentZoom-4)<.03');
+    check('two helmeted workers wait off road during the warning',await evaluate('__traffino.game.event.phase==="warning"&&__traffino.view.crowd.at(-1).body.count===2'));
+    await evaluate(`(()=>{const a=__traffino,g=a.game;g.updateEvent(4);g.updateEvent(.02);a.view.render(g,0,a.viewSettings());a.photoSetting('subject',3);document.querySelector('#app').classList.add('photo-hidden');})()`);
+    check('worksite deploys on the closed exit within scene budget',await evaluate('__traffino.game.event.phase==="active"&&__traffino.view.crowd.at(-1).body.count===2&&__traffino.view.renderer.info.render.calls<140'));
+    await wait('Math.abs(__traffino.view.cameraAngle-(__traffino.view.baseAngle+.42))<.02');await shot('roadworks','webp');
+    await evaluate(`(()=>{const a=__traffino,g=a.game;g.event=null;g.clearTraffic();g.signals.fill(false);const runner=g.spawn(0,'reckless',0);while(runner.runnerAt===null&&g.time<20)g.tick();g.spawn(1,'car',0);for(let i=0;i<204;i++)g.tick();g.command({type:'toggle',direction:1});for(let i=0;i<300&&!g.stats.collisions;i++)g.tick();a.view.render(g,0,a.viewSettings());a.photoSetting('subject',3);document.querySelector('#app').classList.add('photo-hidden');})()`);
+    check('two actual wrecks and an incident camera after running red',await evaluate('__traffino.game.vehicles.filter(v=>v.active&&v.crashLeft>0).length===2&&!!document.querySelector(\'[data-photo="subject"] option[value="3"]\')'));
+    await wait('Math.abs(__traffino.view.cameraAngle-(__traffino.view.baseAngle+.42))<.02');await shot('collision-scene','webp');
+    await evaluate(`(()=>{const a=__traffino,g=a.game;g.director=false;g.clearTraffic();a.show('photo');document.querySelector('#app').classList.add('photo-hidden');const kinds=Object.keys(a.view.models);kinds.forEach((kind,i)=>{const v=g.spawn(i%4,kind,i%3);if(v){v.s=30;v.x=[-1.8,14,1.8,-14][i%4]+(i%4%2?Math.floor(i/4)*4:0);v.z=[-14,-1.8,14,1.8][i%4]+(i%4%2?0:Math.floor(i/4)*4);v.dx=i%4===1?-1:i%4===3?1:0;v.dz=i%4===0?1:i%4===2?-1:0;v.speed=4;}});g.waitingPeople=[3,2,1,2];g.people[0].active=true;Object.assign(g.people[0],{x:1,z:-6.8,t:.5,direction:0});g.signals[0]=true;g.signals[2]=true;})()`);
     for(const [subject,name] of [[1,'officer'],[2,'residents']]){
       await evaluate(`(()=>{const a=__traffino;a.photoSetting('subject',${subject});a.game.timeOfDay=.41;a.game.time=7.1;if(${subject}===1){a.view.event('directionOpened',{direction:0});a.view.heroAngle=a.view.heroFacing;a.view.baseAngle=a.view.heroFacing-.16;}else a.view.baseAngle=.50;document.querySelector('#app').classList.add('photo-hidden');})()`);
       await wait('Math.abs(__traffino.view.currentZoom-__traffino.view.zoom)<.035');
@@ -162,21 +191,23 @@ try {
     for(let shift=0;shift<8;shift++) {
       const result=await evaluate('(()=>{const a=__traffino;__playTest(a.game);return {reason:a.game.reason,medal:a.reward?.medal,coins:a.progress.data.coins};})()');
       check(`browser shift ${shift+1} completion`,result.reason==='complete'&&result.medal>0);await wait('document.querySelector(".results")');
-      if(shift===0){
+      if(shift<=2){
         await click('[data-action="progress"]');
         await wait('document.querySelector(".service-banner")');
-        check('first shift pays for either branch',await evaluate('[...document.querySelectorAll("[data-action=learn]")].filter(b=>!b.disabled).length===2'));
-        await shot('career-first-purchase');
-        await click('[data-action="learn"][data-value="board"]');
-        check('route board charged once and fitted in city',await evaluate('__traffino.view.postSkills.has("board")&&__traffino.progress.data.coins')===result.coins-48);
+        if(shift===0)check('first duty starts savings for three specialities',await evaluate('document.querySelectorAll(".skill-branch").length===3&&document.querySelectorAll("[data-action=learn]:enabled").length===0'));
+        else {
+          const root=shift===1?'board':'ledger';
+          await click('[data-action="learn"][data-value="'+root+'"]');
+          check(root+' charged once and fitted in city',await evaluate('__traffino.view.postSkills.has("'+root+'")&&__traffino.progress.data.coins')===result.coins-48);
+        }
         await click('[data-action="back"]');await wait('document.querySelector(".results")');
       }
       if(shift<7){await click('[data-action="brief"]');await enterShift();await wait('__traffino.screen==="gameplay"');}
     }
     await shot('results');await click('[data-action="menu"]');await click('[data-action="challenges"]');await click('[data-action="challengeTab"][data-value="session"]');
-    const before=await evaluate('__traffino.progress.data.coins');await click('[data-action="claim"][data-value="cars:session"]');check('session reward claim',await evaluate('__traffino.progress.data.coins')>before);
+    const before=await evaluate('__traffino.progress.data.reputation');await click('[data-action="claim"][data-value="cars:session"]');check('session reputation claim',await evaluate('__traffino.progress.data.reputation')>before);
     await click('[data-action="back"]');await click('[data-action="progress"]');await click('[data-action="buy"][data-value="coral"]');await click('[data-action="map"][data-value="harbor"]');check('cosmetic and district selection',await evaluate('__traffino.progress.data.selectedCosmetic==="coral"&&__traffino.progress.data.map==="harbor"'));
-    await click('[data-action="learn"][data-value="radio"]');await click('[data-action="learn"][data-value="ledger"]');
+    await click('[data-action="learn"][data-value="radio"]');
     await click('[data-action="learn"][data-value="dividend"]');
     await click('[data-action="postView"]');await wait('Math.abs(__traffino.view.currentZoom-__traffino.view.zoom)<.04&&Math.abs(__traffino.view.cameraAngle-(__traffino.view.baseAngle+.42))<.02');
     check('tour shows equipped station',await evaluate('__traffino.view.inspectPost&&__traffino.view.postSkills.size===4'));
@@ -187,13 +218,23 @@ try {
     await click('[data-action="cancelConfirm"]');
     check('declining keeps savings and restores focus',await evaluate('__traffino.progress.data.coins')===purse&&await evaluate('document.activeElement.dataset.action==="review"'));
     await click('[data-action="review"][data-value="board"]');await click('[data-action="confirmPromotion"]');
-    check('promotion keeps medals, resets wallet and returns temporary gear',await evaluate('__traffino.progress.grade===1&&__traffino.progress.payRate===3&&__traffino.progress.data.coins===0&&__traffino.progress.data.story.every(Boolean)&&__traffino.view.postSkills.size===1'));
+    check('promotion keeps medals, resets wallet and returns temporary gear',await evaluate('__traffino.progress.grade===1&&__traffino.progress.payRate===2&&__traffino.progress.data.coins===0&&__traffino.progress.data.story.every(Boolean)&&__traffino.view.postSkills.size===1'));
     const saved=await evaluate('JSON.stringify({coins:__traffino.progress.data.coins,story:__traffino.progress.data.story,skin:__traffino.progress.data.selectedCosmetic})');await cdp('Page.reload',{ignoreCache:true});await wait('window.__traffino&&document.querySelector(".hero")');check('save restored after reload',await evaluate('JSON.stringify({coins:__traffino.progress.data.coins,story:__traffino.progress.data.story,skin:__traffino.progress.data.selectedCosmetic})')===saved);
     check('certified board survives restart',await evaluate('__traffino.view.postSkills.has("board")&&__traffino.progress.grade===1'));
     for(const mode of ['endless','rush','hardcore']){await click(`[data-action="play"][data-value="${mode}"]`);await wait('__traffino.screen==="gameplay"');check(mode+' mode starts',await evaluate(`__traffino.game.mode===${JSON.stringify(mode)}`));
+      if(mode==='hardcore'){
+        await evaluate(`(()=>{const a=__traffino,g=a.game;g.director=false;g.clearTraffic();const x=g.spawn(0,'car',0),y=g.spawn(1,'taxi',0);x.s=g.map.extent-g.map.lane-2;y.s=g.map.extent+g.map.lane-2;for(const car of [x,y]){car.committed=true;car.speed=5;}for(let i=0;i<60&&g.running;i++)g.tick();})()`);
+        await wait('document.activeElement.dataset.action==="report"');
+        check('terminal collision stays on the 3D scene until acknowledged',await evaluate('__traffino.view.photoSubject==="incident"&&__traffino.reward.coins===0'));
+        await click('[data-action="report"]');await wait('document.querySelector(".results")');await click('[data-action="menu"]');continue;
+      }
       if(mode==='endless'){
         const turns=await evaluate(`(()=>{const a=__traffino,g=a.game;g.clearTraffic();g.spawn(0,'car',0).s=12;g.spawn(0,'taxi',2);g.tick();a.ui.updateHUD();return document.querySelector('#road-0 .turn-arrow').textContent;})()`);
         check('certified board previews actual second vehicle turn',turns==='↑ › ↱');
+        await evaluate(`(()=>{const a=__traffino,g=a.game;g.director=false;g.clearTraffic();g.triggerEvent('works',2);g.updateEvent(4);g.updateEvent(.1);const car=g.spawn(0,'car',0);car.s=car.route.entry-4;g.tick();a.ui.updateHUD();})()`);
+        await wait('document.querySelector("#detour")&&!document.querySelector("#detour").hidden');await click('#detour');
+        await wait('__traffino.game.lanes[0][0].route.exit!==2');
+        check('roadworks button gives the driver a detour while keeping the signal red',await evaluate('!__traffino.game.signals[0]&&!__traffino.game.lanes[0][0].committed'));
       }
       await click('[data-action="pause"]');await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');await wait('document.querySelector(".results")');await click('[data-action="menu"]');}
     await click('[data-action="settings"]');await click('[data-action="reset"]');await click('[data-action="cancelConfirm"]');check('reset cancellation preserves progress',await evaluate('__traffino.progress.data.story[7]>0'));await click('[data-action="reset"]');await click('[data-action="confirmReset"]');check('confirmed reset',await evaluate('__traffino.progress.data.coins===0&&__traffino.progress.data.story.every(v=>v===0)'));
@@ -206,7 +247,7 @@ try {
       await click(`[data-action="play"][data-value="${mode}"]`);await wait('document.querySelector("#road-0")');await click('[data-action="pause"]');await click('[data-action="photo"]');
       await evaluate(`(()=>{const e=document.querySelector('[data-photo="filter"]');e.value='1';e.dispatchEvent(new Event('input',{bubbles:true}));})()`);check(mode+' photo filter',await evaluate('document.querySelector("#world").style.filter.includes("sepia")'));
       await click('[data-action="exitPhoto"]');check(mode+' photo filter cleared',await evaluate('document.querySelector("#world").style.filter===""'));await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');await wait('document.querySelector(".results")');
-      const before=await evaluate(`JSON.parse(localStorage.getItem('${SAVE_KEY}')).coins`);await click('[data-action="rewarded"]');await wait('document.querySelector("[data-action=rewarded]").disabled');check(mode+' rewarded exactly once',await evaluate(`JSON.parse(localStorage.getItem('${SAVE_KEY}')).coins`)===before+25);await shot('release-results-'+mode);await click('[data-action="menu"]');
+      check(mode+' no payout or ad on incomplete duty',await evaluate(`!document.querySelector('[data-action=rewarded]')&&JSON.parse(localStorage.getItem('${SAVE_KEY}')).coins===300`));await shot('release-results-'+mode);await click('[data-action="menu"]');
     }
     await click('[data-action="settings"]');await evaluate(`(()=>{const e=document.querySelector('[data-setting="language"]');e.value='en';e.dispatchEvent(new Event('input',{bubbles:true}));})()`);check('one release identifier',await evaluate('document.querySelector(".panel").textContent.includes("1.0.0")'));await click('[data-action="back"]');
     for(const [w,h] of [[320,568],[568,320],[1280,720]]){await viewport(w,h);check(`English menu ${w}x${h}`,await evaluate('document.documentElement.scrollWidth<=innerWidth'));await shot('release-en-'+w);}

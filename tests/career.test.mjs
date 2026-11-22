@@ -19,6 +19,48 @@ test('old profiles keep earnings and receive service credit exactly once', () =>
   assert.deepEqual(parseSave({ ...freshSave(), career: malformed }).career, { served: 0, learned: ['ledger', 'dividend'], certified: [] });
 });
 
+test('v3 profiles keep certified equipment, unspent savings and current term traffic',()=>{
+  const old={...freshSave(),version:3,coins:76,totals:{passed:200},career:{served:12,learned:['radio'],certified:['board']}};
+  const restored=parseSave(old);
+  assert.equal(restored.coins,76);
+  assert.deepEqual(restored.career,old.career);
+  assert.deepEqual(parseSave(restored),restored);
+});
+
+test('a quit, failed quota, jam and collision leave no spendable pay even after an autosave',()=>{
+  for(const reason of ['quit','goal','jam','collision','pedestrian']){
+    const values=new Map(),storage={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)};
+    const p=new Progress({storage}),g=new Simulation({mode:'story',director:false});
+    p.start();g.stats.passed=10;g.stats.promptPasses=4;p.sync(g.stats,g.mode);
+    assert.equal(new Progress({storage}).data.coins,0);
+    g.end(reason);
+    assert.equal(p.finish(g).coins,0);
+    assert.equal(p.data.career.served,0);
+    assert.equal(p.rewardAd(p.data.runs),false);
+    const loaded=new Progress({storage});
+    assert.equal(loaded.data.totals.passed,10);
+    assert.equal(loaded.data.coins,0);
+  }
+});
+
+test('ongoing modes bank only closed full intervals that meet their own quota',()=>{
+  for(const mode of ['endless','hardcore']){
+    const p=new Progress();p.start();
+    let last;
+    const g=new Simulation({mode,director:false,emit:(name,data)=>{
+      if(name==='dutyClosed'){last=data;p.closeDuty(data);}
+    }});
+    g.stats.passed=16;g.elapsed=SERVICE.dutySeconds-1;g.tick();
+    assert.equal(p.data.coins,0);
+    g.elapsed=SERVICE.dutySeconds;g.tick();assert.equal(p.data.coins,20);
+    assert.equal(p.closeDuty(last),0);
+    g.stats.passed+=15;g.elapsed=2*SERVICE.dutySeconds;g.tick();
+    assert.equal(p.data.coins,20);
+    g.stats.passed+=20;g.end('quit');
+    assert.equal(p.finish(g).coins,20);assert.equal(p.data.career.served,16);
+  }
+});
+
 test('migration chooses the most recent real timestamp over an older high-revision backup', () => {
   const time = Date.UTC(2026, 10, 21);
   const old = { ...freshSave(), version:2, updatedAt:time, revision:98, coins:2 };
@@ -39,35 +81,36 @@ test('migration chooses the most recent real timestamp over an older high-revisi
   assert.equal(restored.data.coins, 101);
 });
 
-test('eight ordinary story shifts can fund both voluntary promotions, with no duplicate pay', () => {
+test('three certifications require several paid duties and each settlement can only pay once', () => {
   const data = new Map();
   const storage = { getItem: k => data.get(k), setItem: (k,v) => data.set(k,v) };
   const p = new Progress({ storage });
   assert.equal(p.learn('radio'), false);
   assert.equal(p.learn('ledger'), false);
   const promotions = [];
-  for (let shift = 0; shift < 8; shift++) {
+  for (let duty = 0; duty < 26 && promotions.length<3; duty++) {
+    const shift=Math.min(duty,7);
     p.start();
     const startCoins = p.data.coins;
-    const game = new Simulation({ mode: 'story', shift, radio: p.hasSkill('radio') });
+    const game = new Simulation({ mode: 'story', shift, radio: p.hasSkill('radio'),survey:p.hasSkill('survey'),crew:p.hasSkill('crew') });
     playBot(game);
     assert.equal(game.reason, 'complete');
     const income = p.wages(game.stats);
     p.sync(game.stats, game.mode);
     p.sync(game.stats, game.mode);
-    assert.equal(p.data.coins - startCoins, income);
+    assert.equal(p.data.coins, startCoins);
     const reward = p.finish(game);
+    assert.equal(p.finish(game),reward);
     assert.equal(reward.coins, income + reward.bonus);
     assert.equal(p.data.coins - startCoins, reward.coins);
     if (shift === 0) {
-      assert.ok(p.learn('board'));
       assert.equal(p.learn('board'), false);
       assert.equal(p.canPromote('board'), false);
     }
-    const root = p.grade === 0 ? 'board' : 'ledger';
+    const root = ['board','ledger','survey'][p.grade];
     if (!p.hasSkill(root)) p.learn(root);
-    if (p.grade < 2) {
-      p.learn(root === 'board' ? 'radio' : 'dividend');
+    if (p.grade < 3) {
+      p.learn({board:'radio',ledger:'dividend',survey:'crew'}[root]);
       if (p.canPromote(root)) {
         const medals = [...p.data.story], nextRate = p.rateAfterPromotion(root);
         assert.ok(p.promote(root));
@@ -76,15 +119,16 @@ test('eight ordinary story shifts can fund both voluntary promotions, with no du
         assert.equal(p.data.career.served, 0);
         assert.deepEqual(p.data.story, medals);
         assert.equal(p.promote(root), false);
-        promotions.push(shift + 1);
+        promotions.push(duty + 1);
       }
     }
   }
-  assert.equal(promotions.length, 2);
+  assert.equal(promotions.length, 3);
+  assert.ok(promotions[0]>=4 && promotions[2]>8);
   assert.ok(promotions[0] < promotions[1]);
   const restored = new Progress({ storage });
-  assert.deepEqual(restored.data.career.certified, ['board','ledger']);
-  assert.equal(restored.grade, 2);
+  assert.deepEqual(restored.data.career.certified, ['board','ledger','survey']);
+  assert.equal(restored.grade, 3);
   assert.equal(restored.payRate, 5);
   assert.ok(restored.data.story.every(Boolean));
   assert.equal(restored.canPromote('ledger'), false);
@@ -102,7 +146,7 @@ test('dispatch equipment changes deadlines and awards premiums only on qualifyin
   assert.equal(p.learn('dividend'), false);
   assert.ok(p.learn('ledger'));
   assert.ok(p.learn('dividend'));
-  assert.equal(p.payRate, 3);
+  assert.equal(p.payRate, 2);
   const game = new Simulation({ director:false, radio:true });
   assert.equal(game.spawn(0,'ambulance',0).emergencyLeft, BALANCE.emergencyTimer + SERVICE.radioSeconds);
   assert.equal(new Simulation({director:false}).spawn(0,'ambulance',0).emergencyLeft, BALANCE.emergencyTimer);
@@ -113,14 +157,15 @@ test('dispatch equipment changes deadlines and awards premiums only on qualifyin
     game.pass(car);
   }
   assert.equal(game.stats.promptPasses, 1);
-  assert.equal(p.wages(game.stats), 3*3+SERVICE.premium);
-  assert.equal(p.finish(game).premium, SERVICE.premium);
+  assert.equal(p.wages(game.stats), 3*2+SERVICE.premium);
+  game.end('quit');
+  assert.equal(p.finish(game).coins, 0);
   p.data.career.served = SERVICE.promotionTargets[0]-1;
   assert.equal(p.promote('ledger'), false);
   p.data.career.served++;
   assert.ok(p.promote('ledger'));
   assert.deepEqual(p.data.career.learned, []);
-  assert.equal(p.payRate, 4);
+  assert.equal(p.payRate, 3);
   assert.ok(p.hasSkill('ledger'));
   assert.equal(p.hasSkill('dividend'), false);
 });

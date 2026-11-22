@@ -79,7 +79,12 @@ class App {
     if(!active&&this.autoResume&&this.screen==='paused'&&![...this.pause.reasons].some(r=>r!=='screen')) {this.autoResume=false;this.show('gameplay');}
     else if(this.screen==='paused')this.ui?.render();
   }
-  saveSession() {if(this.progress&&this.game&&this.game.running)this.progress.sync(this.game.stats,this.game.mode);}
+  saveSession() {
+    if(!this.progress||!this.game?.running)return;
+    const oldRank=this.progress.rank;
+    this.progress.sync(this.game.stats,this.game.mode);
+    if(this.screen==='gameplay'&&this.progress.rank>oldRank){this.ui.toastText(this.ui.t('rankUp')+' · '+this.ui.t('rank'+this.progress.rank));this.audio.event('unlock');this.view.event('unlock');}
+  }
   start(mode,shift=0) {
     if(this.transitioning)return;
     if(mode==='endless'&&!this.progress.endlessUnlocked)return;
@@ -87,22 +92,25 @@ class App {
     if(mode==='hardcore'&&!this.progress.data.story[7])return;
     if(mode==='story'&&(shift<0||shift>7||(shift>0&&!this.progress.data.story[shift-1])))return;
     this.runStart={rank:this.progress.rank,story:[...this.progress.data.story],collection:Object.keys(this.progress.data.collection),reputation:this.progress.data.reputation};this.unlocks=[];
-    this.progress.start();this.shift=shift;this.isBest=false;this.oldBest=this.progress.data.best[mode];this.autoResume=false;
-    this.game=new Simulation({mode,shift,map:this.map(),radio:this.progress.hasSkill('radio'),emit:(name,data)=>this.event(name,data)});
+    this.progress.start();this.nextAutosave=5;this.shift=shift;this.isBest=false;this.oldBest=this.progress.data.best[mode];this.autoResume=false;
+    this.game=new Simulation({mode,shift,map:this.map(),radio:this.progress.hasSkill('radio'),survey:this.progress.hasSkill('survey'),crew:this.progress.hasSkill('crew'),emit:(name,data)=>this.event(name,data)});
     this.view.setMap(this.map());this.view.bind(this.game);this.view.baseAngle=0;this.view.zoom=1;this.input.clear();this.show('gameplay');
     if([...this.pause.reasons].some(r=>r!=='screen'))this.show('paused');
     this.audio.unlock();
   }
   event(name,data) {
-    const oldRank=this.progress.rank;
     this.audio.event(name,data);this.view?.event(name,data);
     if(name==='vehicleSpawned'){const fresh=!this.progress.data.collection[data.kind];this.progress.seen(data);if(fresh&&this.screen==='gameplay'){this.audio.event('unlock');this.ui.toastText(this.ui.t('newVehicle')+': '+this.ui.t(data.kind));}}
-    if(name==='vehiclePassed') {this.progress.passed(data);this.progress.sync(this.game.stats,this.game.mode);}
-    if(name==='pedestrianPassed'||name==='day')this.progress.sync(this.game.stats,this.game.mode);
-    if(name==='reckless')this.ui?.toast('recklessWarning');
+    if(name==='vehiclePassed')this.progress.passed(data);
+    if(name==='dutyClosed') {
+      this.progress.sync(this.game.stats,this.game.mode,false);
+      const coins=this.progress.closeDuty(data);
+      this.ui.toastText(coins ? this.ui.t('periodBanked')+' · +'+coins+' ◈' : this.ui.t('dutyMissed'));
+      if(coins)this.audio.event('reward');
+    }
     if(name==='emergencyFailed')this.ui?.toast('emergencyFailed');
     if(name==='eventEnded')this.ui?.toast('eventEnd');
-    if(name==='collision') {this.view.shakeLeft=.6;if(this.progress.data.settings.haptics)try{navigator.vibrate?.(80);}catch{}}
+    if(name==='collision') {this.impactDirection=data.direction;this.view.shakeLeft=.6;if(this.progress.data.settings.haptics)try{navigator.vibrate?.(80);}catch{}}
     if(name==='circuitComplete'){this.audio.event('reward');this.ui.toastText(this.ui.t('circuitComplete')+' +'+B.circuitBonus);}
     if(name==='jamResolved'){this.ui?.toastText(this.ui.t('jamSaved')+' · '+this.ui.t(['north','east','south','west'][data.direction]));}
     if(name==='directionOpened'||name==='directionClosed')this.ui?.updateHUD();
@@ -114,9 +122,12 @@ class App {
       for(const map of INTERSECTIONS)if(start.reputation<map.unlock&&s.reputation>=map.unlock)this.unlocks.push(t('unlocked')+': '+t(map.id));
       const found=Object.keys(s.collection).filter(id=>!start.collection.includes(id));if(found.length)this.unlocks.push(t('newVehicle')+': '+found.map(t).join(', '));
       if(this.unlocks.length)this.audio.event('unlock');
-      this.show('results');void this.platform.flush();void this.platform.submit(this.game.mode,this.progress.data.best[this.game.mode]);
+      if(['collision','pedestrian'].includes(this.game.reason)){
+        this.view.photoSubject='incident';this.view.zoom=4;this.view.baseAngle=.15-this.impactDirection*Math.PI/2;
+        this.show('incident');this.ui.root.querySelector('[data-action="report"]').focus({preventScroll:true});
+      }else this.show('results');
+      void this.platform.flush();void this.platform.submit(this.game.mode,this.progress.data.best[this.game.mode]);
     }
-    if(this.screen==='gameplay'&&this.progress.rank>oldRank){this.ui.toastText(this.ui.t('rankUp')+': '+this.ui.t('rank'+this.progress.rank));this.audio.event('unlock');this.view.event('unlock');}
   }
   async afterAd(action) {
     if(this.transitioning)return;this.transitioning=true;
@@ -132,10 +143,13 @@ class App {
   action(name,value='',button) {
     if(this.transitioning)return;this.audio.unlock();if(name!=='toggle'&&name!=='pedestrian')this.audio.ui(name);
     const t=this.ui.t;
-    if(name==='toggle'||name==='pedestrian') {if(this.screen==='gameplay'&&!this.pause.paused)this.input.push(name,Number(value));return;}
-    if(name==='stopAll') {for(let d=0;d<4;d++)if(this.game.signals[d])this.input.push('toggle',d);return;}
+    if(name==='toggle'||name==='pedestrian'||name==='detour') {if(this.screen==='gameplay'&&!this.pause.paused)this.input.push(name,Number(value));return;}
+    if(name==='stopAll') {if(this.screen==='gameplay'&&!this.pause.paused)this.input.push('stopAll');return;}
     if(name==='routes') {this.view.showRoutes=!this.view.showRoutes;button?.setAttribute('aria-pressed',String(this.view.showRoutes));return;}
     if(name==='play')this.start(value);
+    else if(name==='report' && this.screen==='incident'){
+      this.view.photoSubject=null;this.view.zoom=1;this.view.baseAngle=0;this.show('results');
+    }
     else if(name==='rewarded')void this.rewardedCoins();
     else if(name==='fullscreen')void this.platform.fullscreen();
     else if(name==='continue'){this.shift=this.progress.data.story.findIndex(m=>!m);if(this.shift<0)this.shift=7;this.show('brief');}
@@ -186,17 +200,18 @@ class App {
     if(key==='quality')this.view.quality(value);
   }
   photoSetting(key,value) {if(key==='subject'){
-      this.view.photoSubject=[null,'officer','street'][value];this.view.zoom=value===1?9:value===2?6:1;
-      this.view.baseAngle=value===1?this.view.heroAngle-.15:value===2?-2.7:0;this.ui.render();this.ui.root.querySelector('[data-photo="subject"]')?.focus();
+      this.view.photoSubject=[null,'officer','street','incident'][value];this.view.zoom=value===1?9:value===2?6:value===3?4:1;
+      this.view.baseAngle=value===1?this.view.heroAngle-.15:value===2?-2.7:value===3?this.view.incidentAngle:0;this.ui.render();this.ui.root.querySelector('[data-photo="subject"]')?.focus();
     }else if(key==='filter'){this.photoFilter=value;this.view.host.style.filter=['','sepia(.15) saturate(1.12)','hue-rotate(12deg) saturate(.85)'][value]??'';}else if(key==='angle')this.view.baseAngle=value;else this.view.zoom=value;this.view.resize();}
   key(e) {
     if(e.ctrlKey||e.metaKey||e.altKey||e.repeat||e.target.closest('input,select,textarea'))return;
     const modal=this.ui?.root.querySelector('.confirm-overlay');
     if(modal){if(e.code==='Escape')this.action('cancelConfirm');if(e.code==='Tab'){e.preventDefault();const buttons=[...modal.querySelectorAll('button')],i=buttons.indexOf(document.activeElement);buttons[(i+(e.shiftKey?-1:1)+buttons.length)%buttons.length].focus();}return;}
-    if(e.code==='Escape'){e.preventDefault();if(this.screen==='gameplay')this.action('pause');else if(this.screen==='paused')this.action('resume');else if(this.screen==='photo')this.action('exitPhoto');else if(['progress','postView','brief'].includes(this.screen))this.action('back');return;}
+    if(e.code==='Escape'){e.preventDefault();if(this.screen==='gameplay')this.action('pause');else if(this.screen==='paused')this.action('resume');else if(this.screen==='photo')this.action('exitPhoto');else if(this.screen==='incident')this.action('report');else if(['progress','postView','brief'].includes(this.screen))this.action('back');return;}
     if(this.screen!=='gameplay'||this.pause.paused)return;
     const d={KeyW:0,ArrowUp:0,KeyD:1,ArrowRight:1,KeyS:2,ArrowDown:2,KeyA:3,ArrowLeft:3}[e.code];
     if(d!==undefined){e.preventDefault();this.audio.unlock();this.input.push('toggle',d);}
+    if(e.code==='KeyR'){const car=this.game.detourOption()?.car;if(car)this.action('detour',String(car.serial));}
     if(e.code==='Space'){e.preventDefault();this.action('stopAll');}
   }
   canvasInput(e) {
@@ -211,6 +226,7 @@ class App {
     if(this.screen==='gameplay'&&!this.pause.paused&&this.game?.running) {
       this.accumulator+=elapsed;this.input.drain(this.game);
       while(this.accumulator>=B.step&&this.game.running&&this.screen==='gameplay'){this.game.tick();this.accumulator-=B.step;}
+      if(this.game.running && this.game.time>=this.nextAutosave){this.nextAutosave=this.game.time+5;this.saveSession();}
       this.audio.update(this.game);
     } else if(['menu','brief'].includes(this.screen)&&!document.hidden&&!this.pause.reasons.has('focus')&&!this.pause.reasons.has('platform')) {
       const demo=this.demo,axis=Math.floor(demo.time/9)%2;
@@ -221,7 +237,7 @@ class App {
       if(arrival!==this.demoSpawn){this.demoSpawn=arrival;demo.spawn(arrival%4,['taxi','car','van','bus','pizza','car','truck'][arrival%7],0);}
       const caption=document.querySelector('.city-caption span:last-child');if(caption){const minutes=Math.floor(this.demo.timeOfDay*1440);caption.textContent=String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');}
     }
-    const visible=this.game&&['gameplay','paused','results','photo'].includes(this.screen)?this.game:this.demo;
+    const visible=this.game&&['gameplay','paused','results','photo','incident'].includes(this.screen)?this.game:this.demo;
     if(visible&&!document.hidden)this.view.render(visible,elapsed,this.viewSettings());
     if(now-this.lastHUD>90){this.lastHUD=now;this.ui.updateHUD();}
     this.cpuMs=(this.cpuMs??0)*.95+(performance.now()-cpuStart)*.05;

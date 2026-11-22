@@ -33,7 +33,7 @@ export class AudioSystem {
     if(name==='pedestriansStarted')this.play('confirm',.18,'SFX',.3,side);
     if(name==='highFlow')this.play('flow',.16,'SFX',5);
     if(name==='eventEnded')this.play('mission',.3,'SFX',1);
-    if(name==='jamResolved')this.play('confirm',.24,'SFX',1);
+    if(name==='jamResolved'||name==='detourSet')this.play('confirm',.24,'SFX',1);
     if(name==='ended')this.play(data.reason==='complete'?'reward':'pause',.36,'UI',.3);
     if(name==='reward'||name==='unlock'||name==='mission')this.play(name,.38,'UI',.25);
   }

@@ -6,13 +6,13 @@ export const TURNS = ['straight', 'left', 'right'];
 export const BALANCE = {
   step: 1 / 60, capacity: 112, pedestrianCapacity: 48,
   gap: 1.1, stopMargin: 1.7, jamLength: 18, jamGrace: 9, hardJamGrace: 5,
-  collisionSpeed: 0.85, collisionInset: 0.10, wreckTime: 3,
+  collisionSpeed: 0.85, collisionInset: 0.10, wreckTime: 7,
   dayDuration: 180, rushDuration: 150, rushDensity: .58, emergencyTimer: 24,
   eventWarning: 4, eventDuration: 16, eventInterval: 38,
   flowGain: 0.12, flowDecay: 0.014, flowMax: 5, timelyWait: 12,
   circuitBonus: 120,
   score: { car: 30, bus: 70, emergency: 160, pedestrian: 15, day: 200, event: 100 },
-  reputationPerCar: 2, coinsPerCar: 2, completionCoins: 30,
+  reputationPerCar: 2, coinsPerCar: 1, completionCoins: 4,
   emergencyReputation: 10, emergencyPenalty: 80, collisionPenalty: 100,
 };
 export const INTERSECTIONS = [
@@ -36,13 +36,13 @@ export const VEHICLES = {
 };
 export const STORY = [
   { duration: 60, density: .34, goal: 5, turns: false, tier: 0, medals: [200, 390], wait: [22, 13], flow: [1.3, 1.8] },
-  { duration: 75, density: .43, goal: 8, turns: true, tier: 0, medals: [360, 580], wait: [22, 14], flow: [1.5, 2] },
-  { duration: 80, density: .55, goal: 10, turns: true, tier: 0, medals: [460, 720], wait: [24, 15], flow: [1.6, 2.2] },
-  { duration: 85, density: .46, goal: 10, objectives: [{stat:'buses',target:1}], turns: true, tier: 1, medals: [500, 800], wait: [24, 15], flow: [1.6, 2.2] },
-  { duration: 90, density: .46, goal: 10, objectives: [{stat:'emergencyPassed',target:1}], turns: true, tier: 2, medals: [650, 950], wait: [25, 16], flow: [1.7, 2.3] },
-  { duration: 95, density: .46, goal: 10, objectives: [{stat:'pedestrians',target:3}], turns: true, tier: 2, pedestrians: true, medals: [650, 1000], wait: [25, 16], flow: [1.8, 2.4] },
-  { duration: 100, density: .53, goal: 12, objectives: [{stat:'eventsCompleted',target:1}], turns: true, tier: 3, pedestrians: true, events: true, medals: [850, 1350], wait: [26, 17], flow: [1.8, 2.5] },
-  { seed: 1003, duration: 120, density: .55, goal: 15, objectives: [{stat:'emergencyPassed',target:1},{stat:'pedestrians',target:3},{stat:'eventsCompleted',target:1}], turns: true, tier: 3, pedestrians: true, events: true, medals: [1200, 1900], wait: [26, 17], flow: [2, 2.7] },
+  { duration: 75, density: .43, goal: 14, turns: true, tier: 0, medals: [360, 580], wait: [22, 14], flow: [1.5, 2] },
+  { duration: 80, density: .55, goal: 18, turns: true, tier: 0, medals: [460, 720], wait: [24, 15], flow: [1.6, 2.2] },
+  { duration: 85, density: .46, goal: 14, objectives: [{stat:'buses',target:1}], turns: true, tier: 1, medals: [500, 800], wait: [24, 15], flow: [1.6, 2.2] },
+  { duration: 90, density: .46, goal: 18, objectives: [{stat:'emergencyPassed',target:1}], turns: true, tier: 2, medals: [650, 950], wait: [25, 16], flow: [1.7, 2.3] },
+  { duration: 95, density: .46, goal: 16, objectives: [{stat:'pedestrians',target:3}], turns: true, tier: 2, pedestrians: true, medals: [650, 1000], wait: [25, 16], flow: [1.8, 2.4] },
+  { duration: 100, density: .53, goal: 18, objectives: [{stat:'eventsCompleted',target:1}], turns: true, tier: 3, pedestrians: true, events: true, medals: [850, 1350], wait: [26, 17], flow: [1.8, 2.5] },
+  { seed: 1003, duration: 120, density: .55, goal: 24, objectives: [{stat:'emergencyPassed',target:1},{stat:'pedestrians',target:3},{stat:'eventsCompleted',target:1}], turns: true, tier: 3, pedestrians: true, events: true, medals: [1200, 1900], wait: [26, 17], flow: [2, 2.7] },
 ];
 export const EVENTS = ['broken', 'works', 'turn', 'surge', 'wave', 'delivery'];
 export const TRAINING = [
@@ -50,8 +50,10 @@ export const TRAINING = [
   { id: 'radio', cost: 96, requires: 'board' },
   { id: 'ledger', cost: 48 },
   { id: 'dividend', cost: 96, requires: 'ledger' },
+  { id: 'survey', cost: 42 },
+  { id: 'crew', cost: 88, requires: 'survey' },
 ];
-export const SERVICE = { promotionTargets: [45, 90], radioSeconds: 6, premium: 2, premiumFlow: 2 };
+export const SERVICE = { promotionTargets: [90, 160, 240], dutySeconds: 120, dutyGoal: 16, rushGoal: 24, medalCoins: 2, warningLead: 4, crewSeconds: 3, runnerWarning: 4, radioSeconds: 6, premium: 1, premiumFlow: 2 };
 export const RANKS = [0, 150, 420, 900, 1700, 3000];
 export const COSMETICS = [{ id: 'classic', cost: 0, color: 0x3a736a }, { id: 'coral', cost: 120, color: 0xce705b }, { id: 'indigo', cost: 240, color: 0x77789c }];
 export const MISSIONS = [

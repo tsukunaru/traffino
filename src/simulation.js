@@ -3,19 +3,23 @@ import { makeRoutes, conflictMatrix, sample, overlaps, rotate } from './routes.j
 import { random, difficulty, flowAfter, passScore, clamp, storyGoalMet } from './systems.js';
 
 export class Simulation {
-  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, radio=false } = {}) {
+  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, radio=false, survey=false, crew=false } = {}) {
     seed ??= mode==='story'?(STORY[shift].seed??1000+shift):Date.now();
     this.mode=mode; this.shift=shift; this.map=map; this.emit=emit; this.rng=random(seed); this.seed=seed;
     this.emergencyLimit = B.emergencyTimer + (radio ? SERVICE.radioSeconds : 0);
+    this.warningSeconds = B.eventWarning + (survey ? SERVICE.warningLead : 0);
+    this.recoveryDiscount = crew ? SERVICE.crewSeconds : 0;
+    this.duty = { number: 1, passed: 0, promptPasses: 0 };
     this.routes=makeRoutes(map); this.conflicts=conflictMatrix(this.routes);
     this.directions=map.directions??[0,1,2,3];this.routesByDirection=this.directions.map(d=>this.routes.filter(r=>r.direction===d));
     this.vehicles=Array.from({length:B.capacity}, (_,id)=>({ id, active:false, x:0,z:0,dx:0,dz:1 }));
     this.people=Array.from({length:B.pedestrianCapacity}, (_,id)=>({id,active:false,x:0,z:0,dx:1,dz:0,length:.45,width:.45}));
-    this.signals=[false,false,false,false]; this.closedAt=[-99,-99,-99,-99];
+    this.signals=[false,false,false,false];
+    this.wrecks=[];this.lookAhead={};
     this.dangerStates=[false,false,false,false];this.dangerClock=0;
     this.queues=Array.from({length:4},()=>({count:0,length:0,average:0,longest:0,jam:0}));
     this.lanes=Array.from({length:4},()=>[]); this.grid=Array.from({length:144},()=>[]);
-    this.waitingPeople=[0,0,0,0];this.pedestrianHead=[0,0,0,0]; this.pedClock=8; this.eventClock=B.eventInterval;
+    this.waitingPeople=[0,0,0,0];this.pedestrianHead=[0,0,0,0]; this.pedClock=8; this.eventClock=B.eventInterval-SERVICE.warningLead;
     this.time=0; this.elapsed=0; this.day=1; this.timeOfDay=.22; this.flow=1; this.running=true; this.director=director;
     this.trafficProfile={};this.spawnClock=1; this.serial=0; this.event=null; this.tutorial=mode==='story'&&shift===0 ? 0 : 4;
     this.densityScale=1; this.invulnerable=false; this.guaranteed=false;
@@ -31,13 +35,29 @@ export class Simulation {
   }
 
   command({type,direction}) {
-    if (!this.running || !Number.isInteger(direction) || !this.directions.includes(direction)) return;
+    if (!this.running) return;
+    if (type === 'stopAll') {
+      for (const car of this.vehicles) if (car.active && car.runnerAt !== null && !car.committed) {
+        car.runnerAt = null;
+        car.obey = true;
+      }
+      for (const d of this.directions) if (this.signals[d]) this.command({ type:'toggle', direction:d });
+      return;
+    }
+    if(type==='detour') {
+      const option=this.detourOption();
+      if(option && option.car.serial===direction) {
+        option.car.route=option.route;option.car.turn=option.route.turn;
+        this.emit('detourSet',option.car);
+      }
+      return;
+    }
+    if (!Number.isInteger(direction) || !this.directions.includes(direction)) return;
     if(type==='toggle') {
       if(this.tutorial===2 && direction!==1) return;
       if(this.tutorial<2 && direction!==0) return;
       if(this.tutorial===1 && this.stats.passed===0 && this.signals[0]) return;
       this.signals[direction]=!this.signals[direction];
-      if(!this.signals[direction])this.closedAt[direction]=this.time;
       this.emit(this.signals[direction]?'directionOpened':'directionClosed',{direction});
       if(this.tutorial===0) this.tutorial=1;
       else if(this.tutorial===1&&!this.signals[0]) { this.tutorial=2; this.spawn(1,'taxi',0); }
@@ -57,10 +77,9 @@ export class Simulation {
     if(this.event?.phase==='active'&&this.event.kind==='turn'&&this.event.direction===direction&&turn===1)turn=0;
     const choices=this.routesByDirection[this.directions.indexOf(direction)];
     const route=choices.find(r=>r.turn===turn)??choices[0];if(!route)return null;turn=route.turn;
-    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:this.emergencyLimit,emergencyFailed:false,crashLeft:0,broken:0});
+    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:this.emergencyLimit,emergencyFailed:false,crashLeft:0,broken:0,runnerAt:null,obey:false});
     sample(route,0,v); this.emit('vehicleSpawned',v);
     if(def.emergencyPriority)this.emit('emergency',v);
-    if(def.reckless)this.emit('reckless',v);
     return v;
   }
 
@@ -76,10 +95,29 @@ export class Simulation {
 
   profile() { return difficulty(this.day,this.timeOfDay,this.mode,this.trafficProfile); }
 
+  detourOption() {
+    const site=this.event;
+    if(site?.kind!=='works'||!['active','clearing'].includes(site.phase))return null;
+    let car, route;
+    for(const lane of this.lanes){
+      const lead=lane.find(v=>v.active&&!v.committed);
+      if(!lead||lead.s<lead.route.entry-7||lead.route.exit!==site.direction||lead.broken>0||lead.crashLeft>0)continue;
+      if(car&&car.wait>=lead.wait)continue;
+      const choices=this.routesByDirection[this.directions.indexOf(lead.direction)];
+      const alternate=choices.find(r=>r.exit!==site.direction && r.turn!==1);
+      if(alternate){car=lead;route=alternate;}
+    }
+    return car?{car,route}:null;
+  }
+
   destinationClear(v) {
     const e=this.event;
-    if(e?.phase==='active'&&e.kind==='works'&&e.direction===v.route.exit)return false;
+    if(e?.kind==='works' && (e.phase==='clearing'||e.phase==='active')&&e.direction===v.route.exit)return false;
     if(e?.phase==='active'&&e.kind==='turn'&&e.direction===v.direction&&v.turn===1)return false;
+    for (const wreck of this.wrecks) if (wreck.active
+      && (wreck.s >= wreck.route.entry - wreck.length && wreck.s <= wreck.route.exitS + wreck.length
+        ? this.conflicts[v.route.id][wreck.route.id] || v.route === wreck.route
+        : wreck.route.exit === v.route.exit && wreck.s >= wreck.route.exitS)) return false;
     const needed=v.length+B.gap+1;
     for(const other of this.vehicles) if(other.active&&other!==v&&other.route.exit===v.route.exit) {
       const tail=other.s-other.route.exitS-other.length/2;
@@ -101,7 +139,11 @@ export class Simulation {
     this.updateEvent(dt);
     const p=this.profile();
     for(const lane of this.lanes)lane.length=0;
-    for(const v of this.vehicles)if(v.active)this.lanes[v.direction].push(v);
+    this.wrecks.length=0;
+    for(const v of this.vehicles)if(v.active){
+      this.lanes[v.direction].push(v);
+      if(v.crashLeft>0)this.wrecks.push(v);
+    }
     for(const lane of this.lanes)lane.sort((a,b)=>b.s-a.s);
     for(const lane of this.lanes)for(let i=0;i<lane.length;i++)this.move(lane[i],lane,i,dt,p);
     this.updatePeople(dt);
@@ -114,7 +156,19 @@ export class Simulation {
     const bad=this.queues.some(q=>q.longest>B.timelyWait||q.jam>0);
     this.flow=clamp(this.flow-dt*B.flowDecay*(bad?5:1),1,B.flowMax);
     this.stats.maxFlow=Math.max(this.stats.maxFlow,this.flow);
-    if(this.running&&this.elapsed>=this.duration)this.end(this.level&&!storyGoalMet(this.stats,this.level)?'goal':'complete');
+    if (this.elapsed >= this.duration) {
+      const met = this.level ? storyGoalMet(this.stats,this.level) : this.stats.passed >= SERVICE.rushGoal;
+      this.end(met ? 'complete' : 'goal');
+    } else if (!Number.isFinite(this.duration) && this.elapsed >= this.duty.number * SERVICE.dutySeconds) {
+      const record = this.dutyRecord();
+      this.duty = { number:record.number+1, passed:this.stats.passed, promptPasses:this.stats.promptPasses };
+      this.emit('dutyClosed', record);
+    }
+  }
+
+  dutyRecord() {
+    return { number:this.duty.number, passed:this.stats.passed-this.duty.passed,
+      promptPasses:this.stats.promptPasses-this.duty.promptPasses };
   }
 
   move(v,lane,index,dt,profile) {
@@ -126,8 +180,15 @@ export class Simulation {
     }
     let limit=Infinity;
     const stop=v.route.entry-B.stopMargin-v.length/2;
-    const recklessGrace=def.reckless&&this.time-this.closedAt[v.direction]<.45;
-    if(!v.committed&&((!this.signals[v.direction]&&!recklessGrace)||!this.destinationClear(v)))limit=stop;
+    if (!v.committed) {
+      const clear = (this.signals[v.direction] || def.reckless && !v.obey && v.s>=stop-.15) && this.destinationClear(v);
+      if (def.reckless && !v.obey && !this.signals[v.direction] && clear && index===0 && v.s >= stop-.15 && v.runnerAt===null) {
+        v.runnerAt = this.time + SERVICE.runnerWarning;
+        this.emit('reckless',v);
+      }
+      const runningRed = v.runnerAt !== null && this.time >= v.runnerAt;
+      if (!clear || (!this.signals[v.direction] && !runningRed)) limit=stop;
+    }
     if(index>0) {
       const ahead=lane[index-1];
       if((v.s<v.route.entry+2&&ahead.s<ahead.route.entry+8)||ahead.route===v.route)limit=Math.min(limit,ahead.s-(ahead.length+v.length)/2-B.gap);
@@ -137,6 +198,16 @@ export class Simulation {
       const gap=(other.s-other.route.exitS)-(v.s-v.route.exitS);
       if(gap>0)limit=Math.min(limit,v.s+gap-(other.length+v.length)/2-B.gap);
     }
+    // Drivers already inside the junction brake short of a wreck in their swept path.
+    for (const wreck of this.wrecks) if (wreck.active && wreck!==v && v.committed) {
+      const braking=1+v.speed*v.speed/(2*def.brake);
+      if(Math.hypot(wreck.x-v.x,wreck.z-v.z)>braking+(v.length+wreck.length)/2+1)continue;
+      const pose=this.lookAhead;pose.length=v.length;pose.width=v.width;
+      for(let ahead=.25;ahead<=braking+.5;ahead+=.5){
+        sample(v.route,v.s+ahead,pose);
+        if(overlaps(pose,wreck)){limit=Math.min(limit,v.s+Math.max(0,ahead-.55));break;}
+      }
+    }
     let target=v.maxSpeed*profile.speed;
     if(v.turn&&v.s>v.route.entry-1&&v.s<v.route.exitS)target*=.72;
     const gap=Math.max(0,limit-v.s);
@@ -145,7 +216,7 @@ export class Simulation {
     v.speed=Math.max(0,v.speed+clamp(target-v.speed,-def.brake*dt,def.accel*dt));
     v.s=Math.max(v.s,Math.min(v.s+v.speed*dt,limit));
     if(limit-v.s<.015)v.speed=0;
-    if(v.s>stop+.025)v.committed=true;
+    if(v.s>stop+.025){if(!v.committed&&this.signals[v.direction])v.runnerAt=null;v.committed=true;}
     if(!v.committed&&v.speed<1) {v.wait+=dt;this.stats.longestWait=Math.max(this.stats.longestWait,v.wait);}
     v.state=v.broken>0?'Broken':v.s>v.route.exitS?'Leaving':v.committed?'Crossing':v.speed<.1?'Waiting':v.speed<2?'Starting':'Approaching';
     sample(v.route,v.s,v);
@@ -207,10 +278,10 @@ export class Simulation {
   crash(a,b) {
     if(this.invulnerable)return;
     this.circuit?.clear();
-    a.crashLeft=B.wreckTime;a.speed=0;a.state='Crashed';
-    if(b){b.crashLeft=B.wreckTime;b.speed=0;b.state='Crashed';}
+    a.runnerAt=null;a.crashLeft=B.wreckTime-this.recoveryDiscount;a.speed=0;a.state='Crashed';
+    if(b){b.runnerAt=null;b.crashLeft=a.crashLeft;b.speed=0;b.state='Crashed';}
     this.stats.collisions++;this.flow=Math.max(1,this.flow-.85);this.stats.score=Math.max(0,this.stats.score-B.collisionPenalty);
-    this.emit('collision',{x:a.x,z:a.z,pedestrian:!b});
+    this.emit('collision',{x:a.x,z:a.z,direction:a.direction,pedestrian:!b});
     if(!b||this.mode==='hardcore'||this.stats.collisions>=3)this.end(!b?'pedestrian':'collision');
   }
 
@@ -252,12 +323,16 @@ export class Simulation {
       if(forced) {d=forced.direction;kind=forced.kind;}
       if(this.spawn(d,kind)&&forced)this.forcedQueue.shift();
     }
+    if(this.level?.events&&!this.announced && this.time>12-SERVICE.warningLead){
+      this.announced=true;
+      this.triggerEvent(this.shift===6?'works':'delivery',1,true);
+    }
     if(this.level&&!this.guaranteed&&this.time>12) {
       this.guaranteed=true;
       if(this.shift===3)this.forcedQueue.push({direction:1,kind:'bus'},{direction:3,kind:'truck'});
       if(this.level.objectives?.some(o=>o.stat==='emergencyPassed'))this.forcedQueue.push({direction:2,kind:'ambulance'});
       if(this.shift===5)this.waitingPeople[1]+=3;
-      if(this.shift>=6)this.triggerEvent(this.shift===6?'surge':'delivery',1);
+      if(this.shift===7)this.forcedQueue.push({direction:3,kind:'reckless'});
     }
     if(this.level?.pedestrians||!this.level) {
       this.pedClock-=dt;
@@ -265,20 +340,29 @@ export class Simulation {
     }
     if(this.level?.events||!this.level) {
       this.eventClock-=dt;
-      if(this.eventClock<=0&&!this.event){this.eventClock=B.eventInterval/this.profile().events+this.rng()*15;this.triggerEvent();}
+      if(this.eventClock<=0&&!this.event){this.eventClock=B.eventInterval/this.profile().events+this.rng()*15;this.triggerEvent(undefined,undefined,true);}
     }
   }
 
-  triggerEvent(kind=EVENTS[Math.floor(this.rng()*EVENTS.length)],direction=this.directions[Math.floor(this.rng()*this.directions.length)]) {
+  triggerEvent(kind=EVENTS[Math.floor(this.rng()*EVENTS.length)],direction=this.directions[Math.floor(this.rng()*this.directions.length)],planned=false) {
     if(this.event)return;
-    this.event={kind,direction,phase:'warning',remaining:B.eventWarning,collisions:this.stats.collisions};this.emit('eventWarning',this.event);
+    const delayed=planned&&this.warningSeconds===B.eventWarning;
+    this.event={kind,direction,phase:delayed?'scheduled':'warning',remaining:delayed?SERVICE.warningLead:this.warningSeconds,collisions:this.stats.collisions};
+    if(!delayed)this.emit('eventWarning',this.event);
   }
 
   updateEvent(dt) {
-    const e=this.event;if(!e)return;e.remaining-=dt;
-    if(e.remaining>0)return;
-    if(e.phase==='warning') {
-      e.phase='active';e.remaining=B.eventDuration;
+    const e=this.event;if(!e)return;
+    if (e.phase==='clearing') {
+      if (this.vehicles.some(v=>v.active && v.committed && v.route.exit===e.direction && v.s < v.route.exitS + 10 + v.length/2)) return;
+    } else {
+      e.remaining-=dt;
+      if(e.remaining>1e-8)return;
+      if(e.phase==='scheduled'){e.phase='warning';e.remaining=B.eventWarning;this.emit('eventWarning',e);return;}
+      if(e.phase==='warning' && e.kind==='works') { e.phase='clearing'; e.remaining=0; return; }
+    }
+    if(e.phase!=='active') {
+      e.phase='active';e.remaining=B.eventDuration-(['works','broken'].includes(e.kind)?this.recoveryDiscount:0);
       if(e.kind==='broken') {
         const v=this.vehicles.find(v=>v.active&&!v.committed&&v.direction===e.direction)??this.spawn(e.direction,'car',0);
         if(v)v.broken=e.remaining;

@@ -1,7 +1,7 @@
 import { VEHICLES, MISSIONS, COSMETICS, BALANCE as B, RANKS, INTERSECTIONS, AD_COINS, TRAINING, SERVICE } from './config.js';
 import { clamp, medalFor } from './systems.js';
 export const SAVE_KEY='traffino.save.v2';
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 export function futureSave(raw) {try{return (typeof raw==='string'?JSON.parse(raw):raw)?.version>SAVE_VERSION;}catch{return false;}}
 const integer=(v, max=1e12)=>Number.isFinite(v)?clamp(Math.floor(v),0,max):0;
 const statistic=v=>Number.isFinite(v)?clamp(v,0,1e12):0;
@@ -12,7 +12,7 @@ export function parseSave(raw) {
   try {
     const x=typeof raw==='string'?JSON.parse(raw):raw;
     if(!x||typeof x!=='object'||Array.isArray(x))return null;
-    if(![1, 2, SAVE_VERSION].includes(x.version))return null;
+    if(![1, 2, 3, SAVE_VERSION].includes(x.version))return null;
     const s=freshSave();
     s.updatedAt=integer(x.updatedAt,Number.MAX_SAFE_INTEGER);
     for(const k of ['revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
@@ -20,8 +20,8 @@ export function parseSave(raw) {
     for(const k of Object.keys(s.best))s.best[k]=integer(x.best?.[k]);
     for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits','promptPasses'])s.totals[k]=statistic(x.totals?.[k]);
     const career = s.career;
-    career.served = integer(x.version < SAVE_VERSION ? s.totals.passed : x.career?.served);
-    if (x.version === SAVE_VERSION) {
+    career.served = integer(x.version < 3 ? s.totals.passed : x.career?.served);
+    if (x.version >= 3) {
       const learned = Array.isArray(x.career?.learned) ? x.career.learned : [];
       const certified = Array.isArray(x.career?.certified) ? x.career.certified : [];
       for (const skill of TRAINING) {
@@ -58,7 +58,7 @@ export function selectSave(a,b) {
 
 export class Progress {
   constructor({storage=null,cloud=()=>{},now=()=>Date.now(),warn=()=>{}}={}) {
-    this.storage=storage;this.cloud=cloud;this.now=now;this.warn=warn;this.last={};this.readOnly=false;
+    this.storage=storage;this.cloud=cloud;this.now=now;this.warn=warn;this.last={};this.resetPayroll();this.readOnly=false;
     let primary=null,backup=null;
     try {
       const raw=storage?.getItem(SAVE_KEY); primary=parseSave(raw);backup=parseSave(storage?.getItem(SAVE_KEY+'.backup'));
@@ -81,10 +81,15 @@ export class Progress {
     try {this.storage?.setItem(SAVE_KEY,text);}catch{this.warn('saveUnavailable');}
     this.cloud(text);return true;
   }
-  start() {this.last={};this.data.session={progress:{},claimed:[]};this.rollDaily();this.save();}
-  seen(v) {const c=this.data.collection[v.kind]??={seen:0,passed:0};c.seen++;this.save();}
+  resetPayroll() {
+    this.lastDuty = 0;
+    this.payroll = { wages:0, premium:0, bonus:0, coins:0, periods:0 };
+    this.finishedReward = null;
+  }
+  start() {this.last={};this.resetPayroll();this.data.session={progress:{},claimed:[]};this.rollDaily();this.save();}
+  seen(v) {const c=this.data.collection[v.kind]??={seen:0,passed:0};c.seen++;}
   passed(v) {const c=this.data.collection[v.kind]??={seen:1,passed:0};c.passed++;}
-  sync(stats,mode) {
+  sync(stats,mode,persist=true) {
     const s=this.data;this.rollDaily();
     for(const [key,value] of Object.entries(stats)) {
       if(['totalWait','averageWait'].includes(key))continue;
@@ -94,30 +99,51 @@ export class Progress {
       s.daily.progress[key]=max?Math.max(s.daily.progress[key]??0,value):(s.daily.progress[key]??0)+delta;
       s.session.progress[key]=max?Math.max(s.session.progress[key]??0,value):(s.session.progress[key]??0)+delta;
       if (key === 'passed') {
-        s.coins += delta * this.payRate;
-        s.career.served += delta;
         s.reputation += delta * B.reputationPerCar;
       }
-      if (key === 'promptPasses' && this.hasSkill('dividend')) s.coins += delta * SERVICE.premium;
       if(key==='emergencyPassed')s.reputation+=delta*B.emergencyReputation;
       this.last[key]=value;
     }
-    s.best[mode]=Math.max(s.best[mode],stats.score);this.save();
+    s.best[mode]=Math.max(s.best[mode],stats.score);if(persist)this.save();
+  }
+  // Each numbered duty is settled once. A closed interval of an open-ended run survives quitting.
+  settle(record, bonus, qualified) {
+    if (this.finishedReward || record.number <= this.lastDuty) return 0;
+    this.lastDuty = record.number;
+    if (!qualified) return 0;
+    const wages = this.wages(record), total = wages + bonus;
+    this.payroll.wages += wages;
+    this.payroll.premium += wages - record.passed * this.payRate;
+    this.payroll.bonus += bonus;
+    this.payroll.coins += total;
+    this.payroll.periods++;
+    this.data.coins += total;
+    this.data.career.served += record.passed;
+    return total;
+  }
+  closeDuty(record) {
+    const paid = this.settle(record, B.completionCoins, record.passed >= SERVICE.dutyGoal);
+    if (paid) this.save();
+    return paid;
   }
   finish(game) {
-    this.sync(game.stats,game.mode);this.data.runs++;
-    let medal=0,bonus=0;
+    if (this.finishedReward) return this.finishedReward;
+    this.sync(game.stats,game.mode,false);
+    this.data.runs++;
+    let medal=0, bonus=B.completionCoins;
     if(game.reason==='complete') {
-      bonus=B.completionCoins;this.data.reputation+=25;
+      this.data.reputation+=25;
       if(game.mode==='story') {
         medal=medalFor(game.stats,game.shift);
         const previous=this.data.story[game.shift];
-        bonus+=Math.max(0,medal-previous)*20;
+        bonus+=Math.max(0,medal-previous)*SERVICE.medalCoins;
         this.data.story[game.shift]=Math.max(previous,medal);
       }
+      this.settle(game.dutyRecord(), bonus, true);
     }
-    const wages = this.wages(game.stats), premium = wages - game.stats.passed * this.payRate;
-    this.data.coins+=bonus;this.save();return {medal,bonus,wages,premium,coins:wages+bonus,reputation:game.stats.passed*B.reputationPerCar+game.stats.emergencyPassed*B.emergencyReputation+(game.reason==='complete'?25:0)};
+    this.finishedReward = { ...this.payroll, medal, reputation:game.stats.passed*B.reputationPerCar+game.stats.emergencyPassed*B.emergencyReputation+(game.reason==='complete'?25:0) };
+    this.save();
+    return this.finishedReward;
   }
   claim(id,scope='all') {
     this.rollDaily();const m=MISSIONS.find(m=>m.id===id);if(!m)return false;
@@ -126,10 +152,10 @@ export class Progress {
     const source=scope==='all'?this.data.totals:this.data[scope].progress,claimed=scope==='all'?this.data.missions[id]:this.data[scope].claimed.includes(id);
     if(claimed||(source[m.stat]??0)<this.challengeTarget(m,scope))return false;
     if(scope==='all')this.data.missions[id]=true;else this.data[scope].claimed.push(id);
-    const reward=this.challengeReward(m,scope);this.data.coins+=reward.coins;this.data.reputation+=reward.rep;this.save();return true;
+    const reward=this.challengeReward(m,scope);this.data.reputation+=reward.rep;this.save();return true;
   }
   challengeTarget(m,scope) {return scope==='all'?m.target:scope==='daily'?this.dailyTarget(m):m.max?3:Math.max(1,Math.ceil(m.target*.15));}
-  challengeReward(m,scope) {return {coins:Math.ceil(m.coins*(scope==='session'?.35:1)),rep:Math.ceil(m.rep*(scope==='session'?.35:1))};}
+  challengeReward(m,scope) {return {rep:Math.ceil(m.rep*(scope==='session'?.35:1))};}
   dailyTarget(m) {return m.max?4:Math.max(1,Math.ceil(m.target*.2));}
   buy(id) {
     const item=COSMETICS.find(c=>c.id===id);if(!item)return false;
@@ -177,7 +203,7 @@ export class Progress {
     return true;
   }
   get rank() {return RANKS.filter(x=>this.data.reputation>=x).length-1;}
-  rewardAd(run) {if(this.readOnly||run!==this.data.runs||run<=0||this.data.adRewardRun===run)return false;this.data.adRewardRun=run;this.data.coins+=AD_COINS;this.save();return true;}
+  rewardAd(run) {if(!this.finishedReward?.periods||this.readOnly||run!==this.data.runs||run<=0||this.data.adRewardRun===run)return false;this.data.adRewardRun=run;this.data.coins+=AD_COINS;this.save();return true;}
   get endlessUnlocked() {return this.data.story[0]>0;}
-  reset() {this.readOnly=false;this.data=freshSave();this.last={};this.rollDaily();try{this.storage?.removeItem(SAVE_KEY+'.backup');this.storage?.removeItem(SAVE_KEY);}catch{}this.save();}
+  reset() {this.readOnly=false;this.data=freshSave();this.last={};this.resetPayroll();this.rollDaily();try{this.storage?.removeItem(SAVE_KEY+'.backup');this.storage?.removeItem(SAVE_KEY);}catch{}this.save();}
 }

@@ -6,6 +6,9 @@ export function playBot(game) {
     if(game.tutorial===1&&game.stats.passed>0)game.command({type:'toggle',direction:0});
     if(game.tutorial===2)game.command({type:'toggle',direction:1});
     if(game.tutorial>=4&&frame%12===0) {
+      const detour=game.detourOption();
+      if(detour)game.command({type:'detour',direction:detour.car.serial});
+      if(game.vehicles.some(v=>v.active&&!v.committed&&v.runnerAt!==null))game.command({type:'stopAll'});
       const wanted=[false,false,false,false];
       const crossing=game.vehicles.filter(v=>v.active&&v.committed&&v.s<v.route.exitS+v.length/2+1);
       const candidates=game.vehicles.filter(v=>v.active&&!v.committed);
@@ -14,12 +17,13 @@ export function playBot(game) {
         if(pedRequested) {
           if(!game.vehicles.some(v=>v.active&&v.committed)){for(let d=0;d<4;d++)game.command({type:'pedestrian',direction:d});pedUntil=game.time+8;pedRequested=false;}
         } else {
-          const priority=game.queues.map((q,i)=>({i,weight:q.count*20+q.longest+(game.event?.direction===i?25:0)})).sort((a,b)=>b.weight-a.weight);
+          const priority=game.queues.map((q,i)=>({i,weight:q.jam*32+q.length*2+q.longest+(['surge','delivery'].includes(game.event?.kind)&&game.event.phase==='active'&&game.event.direction===i?10:0)})).sort((a,b)=>b.weight-a.weight);
           const reserved=[...crossing];
           for(const {i} of priority) {
             const incoming=candidates.filter(v=>v.direction===i&&v.s>v.route.entry-7);
-            if(incoming.length&&!incoming.some(v=>reserved.some(other=>other.direction!==i&&game.conflicts[v.route.id][other.route.id])))wanted[i]=true;
-            reserved.push(...incoming);
+            if(incoming.length&&!incoming.some(v=>reserved.some(other=>other.direction!==i&&game.conflicts[v.route.id][other.route.id]))){
+              wanted[i]=true;reserved.push(...incoming);
+            }
           }
         }
       }

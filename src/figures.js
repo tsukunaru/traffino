@@ -11,6 +11,7 @@ export const residents=[
   {coat:0x98617a,skin:0xb08062,hair:0x4b3433,pants:0x475867,size:1.03}, // Photographer
   {coat:0x809159,skin:0xe2b08a,hair:0x69514a,pants:0x435963,size:1.00}, // Commuter
 ];
+export const roadWorker={coat:0x344e60,skin:0xc28c68,hair:0x513c32,pants:0x314b59,size:1.05};
 const officer={coat:0x32675f,skin:0xdfa377,hair:0x504338,pants:0x334756,size:1.20};
 export const joints={body:[0,0,0],leftLeg:[-.135,.68,0],rightLeg:[.135,.68,0],leftArm:[-.30,1.24,0],rightArm:[.30,1.24,0]};
 const oval=new THREE.SphereGeometry(.5,12,8), block=new RoundedBoxGeometry(1,1,1,1,.14), drum=new THREE.CylinderGeometry(.5,.5,1,16);
@@ -18,7 +19,7 @@ const smallOval=new THREE.SphereGeometry(.5,8,5),simpleBlock=new THREE.BoxGeomet
 const matrix=new THREE.Object3D(), tint=new THREE.Color();
 
 export function figureParts(style,low=false) {
-  const hero=style==='officer', look=hero?officer:residents[style], {coat,skin,hair,pants}=look;
+  const hero=style==='officer', worker=style==='worker', look=hero?officer:worker?roadWorker:residents[style], {coat,skin,hair,pants}=look;
   const parts={}, coloredUniform=[], eyeRanges=[];
   let pieces=[],vertexOffset=0;
   function shape(base,x,y,z,w,h,d,color,rz=0,rx=0) {
@@ -45,7 +46,7 @@ export function figureParts(style,low=false) {
   shape(tailor,0,0,0,1,1,.74,coat);
   ball(0,1.35,0,.22,.24,.20,skin);
   ball(0,1.67,.018,.61,.69,.55,skin);
-  const capped=hero||style===0||style===2||style===3;
+  const capped=hero||worker||style===0||style===2||style===3;
   ball(0,capped?1.826:1.89,-.062,capped?.565:.62,capped?.23:.38,.49,hair);
   for(const side of [-1,1]){
     ball(side*.287,1.63,.008,.11,.18,.12,skin);
@@ -82,6 +83,19 @@ export function figureParts(style,low=false) {
     box(.17,1.145,.209,.108,.12,.044,ink);
     for(let j=0;j<3;j++)box(.17,1.13+j*.024,.235,.076,.008,.008,0x9baa96);
     box(-.248,.79,.074,.098,.21,.108,ink);box(-.248,.94,.08,.027,.16,.023,ink);
+  } else if(worker){
+    ball(0,1.923,-.005,.65,.29,.57,0xf6b535);
+    cyl(0,1.872,.019,.722,.05,.653,0xfbd36a);
+    box(0,2.044,0,.087,.05,.34,0xffcf5c);
+    for(const side of [-1,1]){
+      ball(side*.295,1.688,0,.116,.16,.14,0xdd8c37);
+      box(side*.143,1.01,.133,.215,.52,.16,0xd9e749,-side*.08);
+      box(side*.14,1.16,.223,.053,.245,.025,0xfff3c4,-side*.16);
+      box(side*.14,.91,.23,.218,.055,.025,0xf0ead0);
+    }
+    cyl(0,.862,0,.555,.076,.431,0xd2dd49);
+    box(0,1.03,-.163,.47,.44,.12,0xd9e749);
+    box(0,.94,-.232,.43,.05,.024,0xfff3c4);
   } else if(style===0 || style===3){
     ball(0,1.952,-.015,.68,.249,.57,style===0?0xddae46:0xba614d);
     ball(0,1.904,.185,.57,.054,.44,style===0?0x96673a:0x84504a);
@@ -128,6 +142,10 @@ export function figureParts(style,low=false) {
     cyl(side*.045,-.407,.042,.169,.075,.17,hero?cream:coat);
     ball(side*.047,-.489,.055,.138,.188,.15,hero?0xfff0d3:skin);
     ball(side*-.018,-.47,.107,.080,.111,.084,hero?cream:skin);
+    if(worker){
+      cyl(side*.042,-.30,.022,.181,.056,.18,0xe3d59c);
+      ball(side*.047,-.493,.055,.154,.19,.17,0xb88851);
+    }
     if(hero&&side>0){
       for(let i=0;i<6;i++)cyl(.064,-.583-i*.101,.065,.079,.105,.079,i%2?cream:ink);
       ball(.064,-1.13,.065,.079,.066,.079,cream);

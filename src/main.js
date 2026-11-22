@@ -68,6 +68,8 @@ class App {
   }
   show(screen) {
     if(screen==='brief')this.dialogueTopic=null;
+    const visible=this.game&&['gameplay','paused','results','photo','incident'].includes(screen)?this.game:this.demo;
+    if(visible&&this.view.boundGame!==visible){this.view.setMap(visible.map);this.view.bind(visible);}
     if(['brief','progress','postView'].includes(screen))this.ui?.toastElement.classList.remove('show');
     this.screen=screen;this.pause.set('screen',screen!=='gameplay');this.syncActivity();this.ui?.render();this.view?.resize();
     if(screen==='gameplay')this.ui?.updateHUD();
@@ -93,8 +95,8 @@ class App {
     if(mode==='story'&&(shift<0||shift>7||(shift>0&&!this.progress.data.story[shift-1])))return;
     this.runStart={rank:this.progress.rank,story:[...this.progress.data.story],collection:Object.keys(this.progress.data.collection),reputation:this.progress.data.reputation};this.unlocks=[];
     this.progress.start();this.nextAutosave=5;this.shift=shift;this.isBest=false;this.oldBest=this.progress.data.best[mode];this.autoResume=false;
-    this.game=new Simulation({mode,shift,map:this.map(),radio:this.progress.hasSkill('radio'),survey:this.progress.hasSkill('survey'),crew:this.progress.hasSkill('crew'),emit:(name,data)=>this.event(name,data)});
-    this.view.setMap(this.map());this.view.bind(this.game);this.view.baseAngle=0;this.view.zoom=1;this.input.clear();this.show('gameplay');
+    this.game=new Simulation({mode,shift,map:this.map(),radio:this.progress.hasSkill('radio'),survey:this.progress.hasSkill('survey'),crew:this.progress.hasSkill('crew'),incident:this.dispatchKind,emit:(name,data)=>this.event(name,data)});
+    this.view.setMap(this.game.map);this.view.bind(this.game);this.view.baseAngle=0;this.view.zoom=1;this.input.clear();this.show('gameplay');
     if([...this.pause.reasons].some(r=>r!=='screen'))this.show('paused');
     this.audio.unlock();
   }
@@ -109,6 +111,7 @@ class App {
       if(coins)this.audio.event('reward');
     }
     if(name==='emergencyFailed')this.ui?.toast('emergencyFailed');
+    if(name==='highwayClear'){this.ui.toast('twoWay');this.audio.event('mission');}
     if(name==='eventEnded')this.ui?.toast('eventEnd');
     if(name==='collision') {this.impactDirection=data.direction;this.view.shakeLeft=.6;if(this.progress.data.settings.haptics)try{navigator.vibrate?.(80);}catch{}}
     if(name==='circuitComplete'){this.audio.event('reward');this.ui.toastText(this.ui.t('circuitComplete')+' +'+B.circuitBonus);}
@@ -146,7 +149,9 @@ class App {
     if(name==='toggle'||name==='pedestrian'||name==='detour') {if(this.screen==='gameplay'&&!this.pause.paused)this.input.push(name,Number(value));return;}
     if(name==='stopAll') {if(this.screen==='gameplay'&&!this.pause.paused)this.input.push('stopAll');return;}
     if(name==='routes') {this.view.showRoutes=!this.view.showRoutes;button?.setAttribute('aria-pressed',String(this.view.showRoutes));return;}
-    if(name==='play')this.start(value);
+    if(name==='dispatch'&&this.screen==='menu')this.show('dispatch');
+    else if(name==='takeDispatch'&&this.screen==='dispatch'&&['repair','crash'].includes(value)){this.dispatchKind=value;this.start('highway');}
+    else if(name==='play')this.start(value);
     else if(name==='report' && this.screen==='incident'){
       this.view.photoSubject=null;this.view.zoom=1;this.view.baseAngle=0;this.show('results');
     }
@@ -178,7 +183,7 @@ class App {
     }
     else if(name==='startStory')void this.afterAd(()=>this.start('story',Number(value)));
     else if(name==='retry')void this.afterAd(()=>this.start(this.game.mode,this.game.shift));
-    else if(name==='menu'){this.game=null;this.view.bind(this.demo);this.show('menu');}
+    else if(name==='menu'){this.game=null;this.view.setMap(this.demo.map);this.view.bind(this.demo);this.show('menu');}
     else if(name==='pause'){this.autoResume=false;this.show('paused');this.saveSession();}
     else if(name==='resume'){this.autoResume=false;if(![...this.pause.reasons].some(r=>r!=='screen'))this.show('gameplay');}
     else if(name==='finish')this.ui.confirm(t('finishConfirm'),'confirmFinish',t('confirm'));
@@ -207,7 +212,7 @@ class App {
     if(e.ctrlKey||e.metaKey||e.altKey||e.repeat||e.target.closest('input,select,textarea'))return;
     const modal=this.ui?.root.querySelector('.confirm-overlay');
     if(modal){if(e.code==='Escape')this.action('cancelConfirm');if(e.code==='Tab'){e.preventDefault();const buttons=[...modal.querySelectorAll('button')],i=buttons.indexOf(document.activeElement);buttons[(i+(e.shiftKey?-1:1)+buttons.length)%buttons.length].focus();}return;}
-    if(e.code==='Escape'){e.preventDefault();if(this.screen==='gameplay')this.action('pause');else if(this.screen==='paused')this.action('resume');else if(this.screen==='photo')this.action('exitPhoto');else if(this.screen==='incident')this.action('report');else if(['progress','postView','brief'].includes(this.screen))this.action('back');return;}
+    if(e.code==='Escape'){e.preventDefault();if(this.screen==='gameplay')this.action('pause');else if(this.screen==='paused')this.action('resume');else if(this.screen==='photo')this.action('exitPhoto');else if(this.screen==='incident')this.action('report');else if(['progress','postView','brief','dispatch'].includes(this.screen))this.action('back');return;}
     if(this.screen!=='gameplay'||this.pause.paused)return;
     const d={KeyW:0,ArrowUp:0,KeyD:1,ArrowRight:1,KeyS:2,ArrowDown:2,KeyA:3,ArrowLeft:3}[e.code];
     if(d!==undefined){e.preventDefault();this.audio.unlock();this.input.push('toggle',d);}
@@ -217,7 +222,7 @@ class App {
   canvasInput(e) {
     if(this.screen==='photo'){document.querySelector('#app').classList.remove('photo-hidden');return;}
     if(this.screen!=='gameplay'||this.pause.paused)return;const rect=this.view.canvas.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
-    let best=-1,dist=90;for(let d=0;d<4;d++){const p=this.view.roadPoint(d),v=Math.hypot(p.x-x,p.y-y);if(v<dist){best=d;dist=v;}}
+    let best=-1,dist=90;for(const d of this.game.directions){const p=this.view.roadPoint(d),v=Math.hypot(p.x-x,p.y-y);if(v<dist){best=d;dist=v;}}
     if(best>=0){this.audio.unlock();this.input.push('toggle',best);}
   }
   frame(now) {

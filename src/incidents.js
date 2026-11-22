@@ -5,6 +5,27 @@ const amber=0xffbe43, cream=0xffedc0, orange=0xdc6630, iron=0x48515a;
 
 // These props use the same instance buffers and traffic clock as the cars.
 export function drawRoadSite(view,game) {
+  const h=game.highway;
+  if(h){
+    if(h.phase==='open')return;
+    const lane=h.blocked===0?-game.map.lane:game.map.lane, side=Math.sign(lane);
+    for(const end of [-1,1]){
+      for(let i=0;i<4;i++){
+        const x=lane-side*(.84-i*.5),z=end*(3.8+i*1.20);
+        view.instance(view.cars,x,.28,z,.43,.12,.43,iron);
+        view.instance(view.wheels,x,.48,z,.31,.32,.31,orange);
+        view.instance(view.wheels,x,.69,z,.18,.13,.18,cream);
+      }
+      const x=lane+side*1.22,z=end*7.5;
+      view.instance(view.cars,x,.34,z,.81,.17,.62,iron);
+      view.instance(view.cars,x,.99,z,.15,1.40,.14,iron);
+      view.instance(view.cars,x,1.69,z,1.25,.76,.14,iron);
+      for(let i=0;i<3;i++)for(const sign of [-1,1])
+        view.instance(view.lights,x+side*(i*.21-.21),1.69+sign*i*.115,z,.15,.15,.17,Math.floor(game.time*3)%3===i?cream:amber);
+    }
+    view.person(lane+side*1.2,h.kind==='crash'?1.3:-1.5,-1,game.time,false,-side*Math.PI/2,true);
+    return;
+  }
   const site=game.event;
   if(site?.kind!=='works'||site.phase==='scheduled')return;
   const deployed=site.phase==='active', {lane,entry,width}=game.map;

@@ -20,11 +20,12 @@
 .toy-menu .mode-button {border:1px solid #dac994;border-radius:8px;background:linear-gradient(#fff2ce,#dfceaa);box-shadow:0 3px #152e28}
 .toy-menu .mode-model{display:block;width:100%;height:70%;max-height:66px;object-fit:contain;filter:drop-shadow(0 2px 1px #5d563644)}
 .toy-menu .mode-button:disabled {color:#615c4c}
-.toy-menu .unlock-note {color:#ede0bd}.at-menu .toy-nav {width:35%}
+.toy-menu .unlock-note {color:#ede0bd}.at-menu .toy-nav {width:39%;grid-template-columns:repeat(5,minmax(0,1fr))}
 .at-menu .toy-nav button {border:1px solid #9ba28780;background:#25483fee;color:#fff0ce;transform:none;border-radius:7px}
 .at-menu .toy-nav svg {color:#e7c682}.at-menu .city-caption {color:#fff2cd;background:#304d44;border:1px solid #d9ca9c}
 .at-menu .city-caption span:last-child {color:#ead7a5}.at-menu .toy-save {color:#625c4c}
 @media(max-height:620px) and (orientation:landscape){
+ .at-menu .toy-nav{width:48%;gap:4px}.at-menu .toy-nav button{flex-direction:column;gap:1px}
  .at-menu .toy-menu{top:12%}.toy-menu .street-sign{font-size:clamp(36px,6.8vw,62px);min-height:58px;padding:.11em .2em .18em}
  .toy-menu .mode-grid{margin-top:10px}.toy-menu .street-sign+.toy-invitation{display:none}.at-menu .toy-menu .start{margin-top:13px}
 }
@@ -33,7 +34,7 @@
  .at-menu #world{left:-12%;top:20%;width:124%;height:56%;mask-image:linear-gradient(transparent,#000 15%,#000 88%,transparent);-webkit-mask-image:linear-gradient(transparent,#000 15%,#000 88%,transparent)}
  .at-menu .toy-menu{inset:4% 5% auto;width:90%;height:84%;text-align:center}
  .toy-menu .street-sign{width:76%;min-height:62px;font-size:clamp(42px,13vw,72px);margin:0 auto}
- .at-menu .toy-menu .start{left:0}.at-menu .toy-nav{width:90%}.at-menu .toy-menu .unlock-note{color:#263f36;background:#f9ecce}
+ .at-menu .toy-menu .start{left:0}.at-menu .toy-nav{width:90%;gap:4px}.at-menu .toy-nav button{flex-direction:column;gap:1px}.at-menu .toy-menu .unlock-note{color:#263f36;background:#f9ecce}
 }
 /* The street stays visible above the conversation. */
 .brief-stage {position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;

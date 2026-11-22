@@ -313,7 +313,72 @@ function dutyStation(v, city) {
   }
 }
 
+function riverBridge(v){
+  const g=v.city,p=PALETTE, road=v.map;
+  const box=(...args)=>v.box(g,...args);
+  box(0,-1.27,0,43,1.5,66,0xb39c78);
+  for(const side of [-1,1])box(0,-.28,side*19.2,42.8,.53,27.5,0x94ac76);
+  box(0,-.37,0,42.7,.15,11.1,0x68b1ba);
+  for(const side of [-1,1])for(let i=0;i<13;i++)
+    box(side*(5.5+(i*3.37)%15),-.286,Math.sin(2.9*i)*4,.46+i%4*.36,.018,.07,0xa0cbc3);
+  for(const z of [-4.9,4.9])box(0,-.58,z,road.width+1.6,.95,1.6,0xb8a78b);
+  box(0,.015,0,road.width+1.65,.29,65.8,p.stone);
+  box(0,.15,0,road.width,.12,65.7,p.road);
+  for(let z=-31;z<=31;z+=3)box(0,.221,z,.11,.018,1.45,p.cream);
+  for(const side of [-1,1]){
+    box(side*3.84,.221,0,.075,.018,65,p.cream);
+    for(const z of [-9,9])box(side*4.38,.33,z,.70,.27,6,p.stone);
+    for(let z=-7.5;z<=8;z+=2.15)box(side*4.48,.75,z,.18,1.22,.23,0x526e6a);
+    for(const y of [.67,1.13])box(side*4.48,y,0,.16,.16,16.2,0x688b7d);
+    for(let z=-28;z<=29;z+=6)if(Math.abs(z)>10){
+      box(side*4.8,.60,z,.19,.99,.23,p.white);
+      box(side*4.8,.87,z,.20,.20,.24,p.ink);
+    }
+    box(side*road.lane,.23,side*(road.entry+1.55),3.5,.025,.24,p.white);
+  }
+  for(let i=0;i<34;i++){
+    const side=i%2?1:-1,z=(i*13%61)-30,x=side*(8+(i*7%12));
+    if(Math.abs(z)<6 || (x < -6&&z < -10) || (x>5&&z>5&&z<11))continue;
+    const h=2.8+(i%5)*.43;
+    box(x,.7,z,.51,1.6,.50,0x87674a);
+    if(i%4===1){
+      for(const [dx,dh,dz] of [[-.56,0,0],[.54,.13,.24],[.07,.85,-.25]])
+        v.mesh(g,'sphere',x+dx,h*.59+dh,z+dz,2.26,2.47,2.1,[0x82a367,0x95ad6d,0x719768][i%3]);
+    }else for(let j=0;j<3;j++)v.mesh(g,'cone',x,1.5+j*h*.26,z,h*(.77-j*.15),h*.75,h*(.77-j*.15),[0x4c7361,0x648966,0x81a178][j]);
+  }
+  for(const side of [-1,1])for(let i=0;i<9;i++){
+    const x=side*(5.4+i*1.76),z=(i%2?1:-1)*(5.23+i%3*.15);
+    v.mesh(g,'sphere',x,-.18,z,.74+i%3*.22,.48,.67,0xa7a68f);
+    for(let j=0;j<3;j++)box(x+.33+j*.12,.05+j%2*.14,z-.15,.07,.75+j%2*.23,.07,0x8f9c57).rotation.z=(j-1)*.17;
+  }
+  // A moored skiff and wooden landing give the waterline a readable scale.
+  box(14.6,-.04,4.76,3.4,.24,1.88,0xb5936c);
+  for(let i=0;i<8;i++)box(13.15+i*.41,.095,4.76,.35,.06,1.88,0xcfac7a);
+  for(const x of [13.12,16.08])box(x,-.06,3.98,.22,1.02,.24,0x836e54);
+  v.mesh(g,'sphere',14.6,-.20,2.88,3.48,.64,1.14,p.coral);
+  v.mesh(g,'sphere',14.6,.06,2.88,2.97,.23,.88,0x835f4d);
+  for(const x of [13.95,15.2])box(x,.15,2.88,.23,.09,.82,p.cream);
+  building(v,g,-13.4,-18.5,8.6,3.4,5.6,p.mint,'');
+  box(-12.8,.12,-12.4,9.9,.15,5.8,0xada68e);
+  box(-13.45,2,-15.59,4.8,3.15,.16,0x556d70);
+  for(let y=.65;y<3.3;y+=.38)box(-13.45,y,-15.48,4.67,.08,.08,0x91a49a);
+  v.sign(g,'17',-10.15,2.48,-15.55,1.0,.7,'#fff1cb');
+  for(const x of [-11.3,-9.7]){
+    box(x,.65,-11.7,.60,1.33,.56,p.coral);box(x,1.54,-11.7,.74,.65,.59,p.cream);
+    box(x,1.58,-11.38,.46,.25,.04,p.glass);
+  }
+  for(const x of [-11.9,-9.07])box(x,1.7,-11.7,.12,3.1,.12,p.ink);
+  box(-10.48,3.31,-11.7,4.43,.25,1.78,p.coral);box(-10.48,3.47,-11.7,4.48,.10,1.82,p.cream);
+  for(const x of [8.0,13.7])box(x,2,-21,.19,3.9,.2,p.ink);
+  box(10.85,3.46,-21,6.42,2.16,.23,p.cream);
+  box(10.85,3.46,-20.84,6.18,1.96,.09,0x377363);
+  v.sign(g,'M 17',10.85,3.5,-20.77,5.6,1.60,'#fff1cb');
+  v.mesh(g,'cylinder',OFFICER_POST.x,.18,OFFICER_POST.z,1.75,.25,1.75,p.cream);
+  v.postPosition={x:OFFICER_POST.x,z:OFFICER_POST.z};
+}
+
 export function buildCity(v) {
+  if(v.map.id==='highway'){riverBridge(v);return;}
   const g=v.city,map=v.map,e=map.extent+1,P=PALETTE;
   v.box(g,0,-.72,0,e*2,1.4,e*2,0xcfbba1);v.box(g,0,-.05,0,e*2,.18,e*2,P.stone);
   v.box(g,0,.06,0,e*2,.12,map.width+1.4,0xf2d8af);v.box(g,0,.065,0,map.width+1.4,.12,e*2,0xf2d8af);

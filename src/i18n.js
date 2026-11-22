@@ -179,7 +179,7 @@ Object.assign(strings.en, {
 Object.assign(strings.ru,{photoSubject:'В кадре',officer:'Регулировщик',street:'Прохожие'});
 Object.assign(strings.en,{photoSubject:'Subject',officer:'Traffic officer',street:'Residents'});
 Object.assign(strings.ru,{
-  report:'К итогу смены',periodBanked:'Жалованье за дежурство',detour:'Объезд',incident:'Место происшествия',estimate:'Ведомость', wageTerms:'Выплата после полной смены и выполнения задания', dutyPaid:'Оплачено смен', dutyMissed:'Норма не выполнена. Дежурство без оплаты.',
+  highway:'Трасса',bridgeDuty:'Дежурство на мосту',bridgeBrief:'Одна полоса занята. Дай северу зелёный клавишей W, затем запроси юг клавишей S. Сигнал откроется, когда хвост колонны покинет мост. Пробел отменяет запрос.',bridgeQuota:'150 секунд. Проведи 22 машины, из них хотя бы по две с каждой стороны во время реверса.',chooseDispatch:'Выбери вызов',roadRepair:'Поломка автобуса',roadCrash:'ДТП на мосту',twoWay:'Обе полосы свободны',bridgeDrain:'Участок расчищен. Выпускаем последнюю колонну',nextConvoy:'После освобождения моста',pickConvoy:'Выбери колонну · W / S',convoyFrom:'Открыт въезд',queuedGreen:'Ожидает',northConvoy:'С севера по реверсу',southConvoy:'С юга по реверсу',report:'К итогу смены',periodBanked:'Жалованье за дежурство',detour:'Объезд',incident:'Место происшествия',estimate:'Ведомость', wageTerms:'Выплата после полной смены и выполнения задания', dutyPaid:'Оплачено смен', dutyMissed:'Норма не выполнена. Дежурство без оплаты.',
   unpaid:'Смена без оплаты. Для выплаты нужны полная смена и выполненное задание.', grade3:'Инспектор округа',
   branchSurvey:'Дорожная служба',skill_survey:'План работ',skill_crew:'Дежурная бригада',
   effect_survey:'Предупреждение о дорожном событии приходит на {lead} с раньше.',
@@ -189,7 +189,7 @@ Object.assign(strings.ru,{
   rushDesc:'Проведи 24 машины за 150 секунд плотного трафика.',goal:'Задание смены не выполнено'
 });
 Object.assign(strings.en,{
-  report:'Shift report',periodBanked:'Duty paid',detour:'Detour',incident:'Incident scene',estimate:'Payslip', wageTerms:'Paid after a full shift that meets its assignment', dutyPaid:'Shifts paid', dutyMissed:'Traffic quota missed. This duty earned no pay.',
+  highway:'Highway',bridgeDuty:'Bridge duty',bridgeBrief:'One lane is blocked. Release north with W, then request south with S. The signal opens when the tail of the convoy leaves the bridge. Space cancels the request.',bridgeQuota:'150 seconds. Guide 22 vehicles, including two from each side during the closure.',chooseDispatch:'Choose a call',roadRepair:'Disabled bus',roadCrash:'Bridge collision',twoWay:'Both lanes are clear',bridgeDrain:'Road cleared. Last convoy leaving',nextConvoy:'Next after clearance',pickConvoy:'Choose a convoy · W / S',convoyFrom:'Entry open',queuedGreen:'Pending',northConvoy:'North convoy',southConvoy:'South convoy',report:'Shift report',periodBanked:'Duty paid',detour:'Detour',incident:'Incident scene',estimate:'Payslip', wageTerms:'Paid after a full shift that meets its assignment', dutyPaid:'Shifts paid', dutyMissed:'Traffic quota missed. This duty earned no pay.',
   unpaid:'Unpaid shift. Complete the full shift and meet its assignment to collect wages.',grade3:'District inspector',
   branchSurvey:'Road service',skill_survey:'Road survey',skill_crew:'Standby crew',
   effect_survey:'Receive road event warnings {lead} seconds earlier.',

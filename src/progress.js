@@ -6,7 +6,7 @@ export function futureSave(raw) {try{return (typeof raw==='string'?JSON.parse(ra
 const integer=(v, max=1e12)=>Number.isFinite(v)?clamp(Math.floor(v),0,max):0;
 const statistic=v=>Number.isFinite(v)?clamp(v,0,1e12):0;
 export function freshSave() {
-  return {version:SAVE_VERSION,career:{ served:0, learned:[], certified:[] },updatedAt:0,revision:0,reputation:0,coins:0,story:Array(8).fill(0),collection:{},best:{endless:0,rush:0,hardcore:0,story:0},totals:{},missions:{},daily:{date:'',progress:{},claimed:[]},session:{progress:{},claimed:[]},cosmetics:['classic'],selectedCosmetic:'classic',map:'garden',settings:{master:.65,music:.35,sfx:.7,language:'',shake:true,haptics:false,quality:'medium'},runs:0,adRewardRun:0};
+  return {version:SAVE_VERSION,career:{ served:0, learned:[], certified:[] },updatedAt:0,revision:0,reputation:0,coins:0,story:Array(8).fill(0),collection:{},best:{endless:0,rush:0,hardcore:0,highway:0,story:0},totals:{},missions:{},daily:{date:'',progress:{},claimed:[]},session:{progress:{},claimed:[]},cosmetics:['classic'],selectedCosmetic:'classic',map:'garden',settings:{master:.65,music:.35,sfx:.7,language:'',shake:true,haptics:false,quality:'medium'},runs:0,adRewardRun:0};
 }
 export function parseSave(raw) {
   try {
@@ -18,7 +18,7 @@ export function parseSave(raw) {
     for(const k of ['revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
     s.story=s.story.map((_,i)=>clamp(integer(x.story?.[i]),0,3));
     for(const k of Object.keys(s.best))s.best[k]=integer(x.best?.[k]);
-    for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits','promptPasses'])s.totals[k]=statistic(x.totals?.[k]);
+    for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits','promptPasses','northConvoy','southConvoy'])s.totals[k]=statistic(x.totals?.[k]);
     const career = s.career;
     career.served = integer(x.version < 3 ? s.totals.passed : x.career?.served);
     if (x.version >= 3) {

@@ -96,6 +96,13 @@ try {
     await shot('windows-promotion');await click('[data-action="confirmPromotion"]');
     await cdp('Page.reload');await wait('document.querySelector(".hero")');await click('[data-action="progress"]');
     check('Windows promotion survives restart with medals',await evaluate(`(()=>{const s=JSON.parse(localStorage.getItem('${SAVE_KEY}'));return s.coins===0&&s.story[0]===2&&s.career.certified.join()==='ledger'&&!s.career.learned.length&&document.querySelector('.service-banner h1').textContent==='Старший регулировщик';})()`));
+    await click('[data-action="back"]');await click('[data-action="dispatch"]');
+    await click('[data-action="takeDispatch"][data-value="repair"]');
+    await wait('document.querySelector("#event-banner")?.textContent.includes("Поломка автобуса")');
+    await click('#road-0');await wait('document.querySelector("#road-0").getAttribute("aria-pressed")==="true"&&document.querySelector("#hud-time").textContent<"2:29"');
+    await click('#road-2');await wait('document.querySelector("#road-2 .signal-state").textContent==="Ожидает"');
+    await wait('document.querySelector("#road-2").getAttribute("aria-pressed")==="true"');
+    check('packaged highway hands the lane to the second convoy',await evaluate('document.querySelector("#road-0").getAttribute("aria-pressed")==="false"&&document.querySelector("#road-1").hidden'));
     check('no runtime errors', !errors.length);
     console.log('Windows desktop PASS:', checks);
   } else {
@@ -104,7 +111,43 @@ try {
   await viewport(1280,720);await cdp('Page.navigate',{url});await wait('document.querySelector(".hero")');
   check('ready once with interactive menu',await evaluate('__sdkQA.ready===1'));
   check('station sign and Cyrillic font loaded',await evaluate('document.querySelector(".street-sign").textContent==="Traffino"&&document.fonts.check("900 24px Nunito")'));
-  if(art){
+  if(process.argv.includes('--highway')){
+    await wait('window.__traffino');await evaluate('document.querySelector(".debug-panel").hidden=true');
+    await click('[data-action="dispatch"]');await click('[data-action="takeDispatch"][data-value="crash"]');
+    await wait('__traffino.game?.highway&&document.querySelector("#road-0")');
+    check('highway has only two entrance controls',await evaluate('document.querySelector("#road-1").hidden&&document.querySelector("#road-3").hidden&&__traffino.view.map.id==="highway"'));
+    await click('#road-0');await wait('__traffino.game.vehicles.some(v=>v.active&&v.committed)');
+    await click('#road-2');await wait('__traffino.game.highway.requested===2&&__traffino.game.signals.every(s=>!s)');
+    await wait('__traffino.game.signals[2]');checks.push('opposite entrance opens after real input and lane clearance');
+    await click('[data-action="pause"]');await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');await click('[data-action="menu"]');
+    check('district is restored on return',await evaluate('__traffino.view.map.id===__traffino.demo.map.id'));
+    await click('[data-action="dispatch"]');await click('[data-action="takeDispatch"][data-value="crash"]');
+    await evaluate(`(()=>{const a=__traffino;a.pause.set('capture',true);const g=a.game,v=a.view;
+      g.command({type:'toggle',direction:0});v.baseAngle=.37;v.cameraAngle=.79;v.currentZoom=v.zoom=1.28;v.setProjection();
+      const movie=document.createElement('canvas');movie.width=960;movie.height=540;
+      const ctx=movie.getContext('2d'),stream=movie.captureStream(0),track=stream.getVideoTracks()[0],chunks=[];
+      const recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8',videoBitsPerSecond:1800000});
+      recorder.ondataavailable=e=>chunks.push(e.data);
+      window.finishMovie=new Promise(resolve=>{recorder.onstop=async()=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(new Blob(chunks,{type:'video/webm'}));track.stop();};});
+      window.recordBatch=async(start,count)=>{for(let i=start;i<start+count;i++){
+        if(i===35)g.command({type:'toggle',direction:2});for(let j=0;j<10;j++)g.tick();
+        v.render(g,1/12,a.viewSettings());a.ui.updateHUD();
+        ctx.fillStyle='#dad5c3';ctx.fillRect(0,0,960,540);ctx.drawImage(v.canvas,0,0,960,540);
+        ctx.fillStyle='#253f39';ctx.fillRect(0,482,960,58);ctx.fillStyle='#fff0ca';ctx.font='800 19px Nunito';ctx.textAlign='center';
+        ctx.fillText(document.querySelector('#event-banner').textContent,480,517,930);
+        track.requestFrame();await new Promise(r=>setTimeout(r,65));
+      }};
+      recorder.start();window.stopMovie=()=>recorder.stop();
+    })()`);
+    for(let i=0;i<108;i+=12){
+      await evaluate('recordBatch('+i+',12)');
+      if(i===12)await shot('highway','webp');
+    }
+    await evaluate('stopMovie()');const movie=await evaluate('finishMovie');
+    await writeFile('artifacts/highway-convoys.webm',Buffer.from(movie.split(',')[1],'base64'));
+    check('recording shows both convoys completing the same lane',await evaluate('__traffino.game.stats.northConvoy>=2&&__traffino.game.stats.southConvoy>=2&&__traffino.game.stats.collisions===0'));
+    check('highway clean console',errors.length===0);console.log('Highway PASS: '+checks.length+' checks');
+  }else if(art){
     await wait('window.__traffino');await evaluate('document.querySelector(".debug-panel").hidden=true');await shot('visual-menu');await shot('town-menu','webp');
     for(const [w,h] of [[320,568],[390,844],[568,320],[844,390],[1024,768],[1280,720],[1920,1080]]){await viewport(w,h);check(`art menu fits ${w}x${h}`,await evaluate(`(()=>{const a=document.querySelector('.start').getBoundingClientRect(),b=document.querySelector('.mode-grid').getBoundingClientRect(),c=document.querySelector('.menu-bottom').getBoundingClientRect();return a.bottom<=b.top&&b.bottom<=c.top&&c.bottom<=innerHeight;})()`));if(w===390||w===568)await shot('visual-menu-'+w);}
     await viewport(1440,900);await click('[data-action="continue"]');await enterShift();await evaluate(`(()=>{const a=__traffino,g=a.game;g.director=false;g.clearTraffic();g.tutorial=4;a.show('photo');document.querySelector('#app').classList.add('photo-hidden');g.spawn(2,'taxi',0);for(let i=0;i<180;i++)g.tick();g.timeOfDay=.41;})()`);

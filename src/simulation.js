@@ -2,9 +2,12 @@ import { BALANCE as B, VEHICLES, STORY, INTERSECTIONS, EVENTS, SERVICE } from '.
 import { makeRoutes, conflictMatrix, sample, overlaps, rotate } from './routes.js';
 import { random, difficulty, flowAfter, passScore, clamp, storyGoalMet } from './systems.js';
 
+import { HIGHWAY, ROAD_DUTY, highwayIncident, highwayRoute, selectConvoy, updateConvoy } from './highway.js';
+
 export class Simulation {
-  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, radio=false, survey=false, crew=false } = {}) {
+  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, radio=false, survey=false, crew=false, incident='repair' } = {}) {
     seed ??= mode==='story'?(STORY[shift].seed??1000+shift):Date.now();
+    if(mode==='highway')map=HIGHWAY;
     this.mode=mode; this.shift=shift; this.map=map; this.emit=emit; this.rng=random(seed); this.seed=seed;
     this.emergencyLimit = B.emergencyTimer + (radio ? SERVICE.radioSeconds : 0);
     this.warningSeconds = B.eventWarning + (survey ? SERVICE.warningLead : 0);
@@ -24,24 +27,37 @@ export class Simulation {
     this.trafficProfile={};this.spawnClock=1; this.serial=0; this.event=null; this.tutorial=mode==='story'&&shift===0 ? 0 : 4;
     this.densityScale=1; this.invulnerable=false; this.guaranteed=false;
     this.stats={score:0,playTime:0,day:1,passed:0,cars:0,buses:0,emergencyPassed:0,emergencyFailed:0,pedestrians:0,collisions:0,jams:0,maxFlow:1,averageWait:0,totalWait:0,longestWait:0,longestQueue:0,rushHours:0,eventsCompleted:0,nights:0,cleanShifts:0};
-    this.level=mode==='story'?STORY[shift]:null; this.duration=this.level?.duration??(mode==='rush'?B.rushDuration:Infinity);
+    this.level=mode==='story'?STORY[shift]:mode==='highway'?ROAD_DUTY:null; this.duration=this.level?.duration??(mode==='rush'?B.rushDuration:Infinity);
     if(this.level?.objectives?.some(o=>o.stat==='pedestrians'))this.waitingPeople[1]=3;
     // Rush Hour rewards clearing every approach between collisions.
     this.circuit = mode === 'rush' ? new Set() : null;
     this.stats.circuits = 0;
     this.stats.promptPasses = 0;
     this.forcedQueue=[];
+    this.renderVehicles=this.vehicles;
+    if(mode==='highway'){
+      this.highway=highwayIncident(this,incident==='crash'?'crash':'repair');
+      this.renderVehicles=this.vehicles.concat(this.highway.vehicles);
+      this.stats.northConvoy=this.stats.southConvoy=0;
+      for(const d of this.directions){
+        const lead=this.spawn(d,d===0?'bus':'truck',0);lead.s=lead.route.entry-B.stopMargin-lead.length/2;sample(lead.route,lead.s,lead);
+        const second=this.spawn(d,'car',0);second.s=lead.s-(lead.length+second.length)/2-B.gap;sample(second.route,second.s,second);
+      }
+    }
     if (this.tutorial===0) this.spawn(0,'car',0);
   }
 
   command({type,direction}) {
     if (!this.running) return;
     if (type === 'stopAll') {
+      if(this.highway)this.highway.requested=null;
       for (const car of this.vehicles) if (car.active && car.runnerAt !== null && !car.committed) {
         car.runnerAt = null;
         car.obey = true;
       }
-      for (const d of this.directions) if (this.signals[d]) this.command({ type:'toggle', direction:d });
+      for (const d of this.directions) if (this.signals[d]) {
+        if(this.highway)this.signal(d,false);else this.command({ type:'toggle', direction:d });
+      }
       return;
     }
     if(type==='detour') {
@@ -54,15 +70,24 @@ export class Simulation {
     }
     if (!Number.isInteger(direction) || !this.directions.includes(direction)) return;
     if(type==='toggle') {
+      if(this.highway && this.highway.phase!=='open'){
+        if(this.highway.phase==='closed')selectConvoy(this,direction);
+        return;
+      }
       if(this.tutorial===2 && direction!==1) return;
       if(this.tutorial<2 && direction!==0) return;
       if(this.tutorial===1 && this.stats.passed===0 && this.signals[0]) return;
-      this.signals[direction]=!this.signals[direction];
-      this.emit(this.signals[direction]?'directionOpened':'directionClosed',{direction});
+      this.signal(direction,!this.signals[direction]);
       if(this.tutorial===0) this.tutorial=1;
       else if(this.tutorial===1&&!this.signals[0]) { this.tutorial=2; this.spawn(1,'taxi',0); }
       else if(this.tutorial===2&&direction===1&&this.signals[1])this.tutorial=3;
     } else if(type==='pedestrian') this.cross(direction);
+  }
+
+  signal(direction,open){
+    if(this.signals[direction]===open)return;
+    this.signals[direction]=open;
+    this.emit(open?'directionOpened':'directionClosed',{direction});
   }
 
   spawn(direction, kind, turn) {
@@ -76,8 +101,8 @@ export class Simulation {
     if(turn===undefined) { const r=this.rng(); turn=this.level&&!this.level.turns?0:r<this.profile().left?1:r<.4?2:0; }
     if(this.event?.phase==='active'&&this.event.kind==='turn'&&this.event.direction===direction&&turn===1)turn=0;
     const choices=this.routesByDirection[this.directions.indexOf(direction)];
-    const route=choices.find(r=>r.turn===turn)??choices[0];if(!route)return null;turn=route.turn;
-    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:this.emergencyLimit,emergencyFailed:false,crashLeft:0,broken:0,runnerAt:null,obey:false});
+    const route=this.highway?highwayRoute(this,direction):choices.find(r=>r.turn===turn)??choices[0];if(!route)return null;turn=route.turn;
+    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:this.emergencyLimit,emergencyFailed:false,crashLeft:0,broken:0,runnerAt:null,obey:Boolean(this.highway),convoy:false});
     sample(route,0,v); this.emit('vehicleSpawned',v);
     if(def.emergencyPriority)this.emit('emergency',v);
     return v;
@@ -137,6 +162,7 @@ export class Simulation {
     if(this.tutorial===3&&this.stats.passed>=2)this.tutorial=4;
     if(this.director&&this.tutorial>=3)this.updateDirector(dt);
     this.updateEvent(dt);
+    if(this.highway)updateConvoy(this,dt);
     const p=this.profile();
     for(const lane of this.lanes)lane.length=0;
     this.wrecks.length=0;
@@ -216,8 +242,15 @@ export class Simulation {
     v.speed=Math.max(0,v.speed+clamp(target-v.speed,-def.brake*dt,def.accel*dt));
     v.s=Math.max(v.s,Math.min(v.s+v.speed*dt,limit));
     if(limit-v.s<.015)v.speed=0;
-    if(v.s>stop+.025){if(!v.committed&&this.signals[v.direction])v.runnerAt=null;v.committed=true;}
-    if(!v.committed&&v.speed<1) {v.wait+=dt;this.stats.longestWait=Math.max(this.stats.longestWait,v.wait);}
+    if(!v.committed && v.s>stop+.025){
+      if(this.signals[v.direction])v.runnerAt=null;
+      v.convoy=this.highway?.phase==='closed';v.committed=true;
+    }
+    if(v.convoy && v.s>v.route.exitS+v.length/2+.25){
+      this.stats[v.direction===0?'northConvoy':'southConvoy']++;v.convoy=false;
+    }
+    v.held=limit-v.s<1.5||v.broken>0;
+    if(!v.committed&&v.held&&v.speed<1) {v.wait+=dt;this.stats.longestWait=Math.max(this.stats.longestWait,v.wait);}
     v.state=v.broken>0?'Broken':v.s>v.route.exitS?'Leaving':v.committed?'Crossing':v.speed<.1?'Waiting':v.speed<2?'Starting':'Approaching';
     sample(v.route,v.s,v);
     if(v.s>=v.route.length-.05)this.pass(v);
@@ -249,7 +282,7 @@ export class Simulation {
   updateQueues(dt) {
     for(let d=0;d<4;d++) {
       const q=this.queues[d]; q.count=0;q.length=0;q.longest=0;q.average=0;
-      for(const v of this.lanes[d])if(v.active&&!v.committed&&v.speed<2) {q.count++;q.length+=v.length+B.gap;q.longest=Math.max(q.longest,v.wait);q.average+=v.wait;}
+      for(const v of this.lanes[d])if(v.active&&!v.committed&&v.held&&v.speed<2) {q.count++;q.length+=v.length+B.gap;q.longest=Math.max(q.longest,v.wait);q.average+=v.wait;}
       if(q.count)q.average/=q.count;
       this.stats.longestQueue=Math.max(this.stats.longestQueue,q.count);
       const critical=Math.min(B.jamLength,(this.map.extent-this.map.entry-B.stopMargin)*.83);
@@ -345,7 +378,7 @@ export class Simulation {
   }
 
   triggerEvent(kind=EVENTS[Math.floor(this.rng()*EVENTS.length)],direction=this.directions[Math.floor(this.rng()*this.directions.length)],planned=false) {
-    if(this.event)return;
+    if(this.event||this.highway)return;
     const delayed=planned&&this.warningSeconds===B.eventWarning;
     this.event={kind,direction,phase:delayed?'scheduled':'warning',remaining:delayed?SERVICE.warningLead:this.warningSeconds,collisions:this.stats.collisions};
     if(!delayed)this.emit('eventWarning',this.event);

@@ -5,14 +5,18 @@ import { random, difficulty, flowAfter, passScore, clamp, storyGoalMet } from '.
 import { HIGHWAY, ROAD_DUTY, highwayIncident, highwayRoute, selectConvoy, updateConvoy } from './highway.js';
 
 export class Simulation {
-  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, radio=false, survey=false, crew=false, incident='repair' } = {}) {
+  constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, skills=[], radio=skills.includes('radio'), survey=skills.includes('survey'), crew=skills.includes('crew'), incident='repair' } = {}) {
     seed ??= mode==='story'?(STORY[shift].seed??1000+shift):Date.now();
     if(mode==='highway')map=HIGHWAY;
     this.mode=mode; this.shift=shift; this.map=map; this.emit=emit; this.rng=random(seed); this.seed=seed;
     this.emergencyLimit = B.emergencyTimer + (radio ? SERVICE.radioSeconds : 0);
     this.warningSeconds = B.eventWarning + (survey ? SERVICE.warningLead : 0);
     this.recoveryDiscount = crew ? SERVICE.crewSeconds : 0;
-    this.duty = { number: 1, passed: 0, promptPasses: 0 };
+    this.towDiscount=this.recoveryDiscount+(skills.includes('tow')?SERVICE.towSeconds:0);
+    this.jamLimit=(mode==='hardcore'?B.hardJamGrace:B.jamGrace)+(skills.includes('reserve')?SERVICE.jamSeconds:0);
+    this.flowDecay=B.flowDecay*(skills.includes('rhythm')?1-SERVICE.flowRetention:1);
+    this.priorityBoost=skills.includes('priority')?SERVICE.priorityAcceleration:0;
+    this.duty = { number: 1, passed: 0, promptPasses: 0, collisions:0 };
     this.routes=makeRoutes(map); this.conflicts=conflictMatrix(this.routes);
     this.directions=map.directions??[0,1,2,3];this.routesByDirection=this.directions.map(d=>this.routes.filter(r=>r.direction===d));
     this.vehicles=Array.from({length:B.capacity}, (_,id)=>({ id, active:false, x:0,z:0,dx:0,dz:1 }));
@@ -180,21 +184,21 @@ export class Simulation {
     this.dangerClock-=dt;
     if(this.dangerClock<=0){this.dangerClock=.1;this.updateDanger();}
     const bad=this.queues.some(q=>q.longest>B.timelyWait||q.jam>0);
-    this.flow=clamp(this.flow-dt*B.flowDecay*(bad?5:1),1,B.flowMax);
+    this.flow=clamp(this.flow-dt*this.flowDecay*(bad?5:1),1,B.flowMax);
     this.stats.maxFlow=Math.max(this.stats.maxFlow,this.flow);
     if (this.elapsed >= this.duration) {
       const met = this.level ? storyGoalMet(this.stats,this.level) : this.stats.passed >= SERVICE.rushGoal;
       this.end(met ? 'complete' : 'goal');
     } else if (!Number.isFinite(this.duration) && this.elapsed >= this.duty.number * SERVICE.dutySeconds) {
       const record = this.dutyRecord();
-      this.duty = { number:record.number+1, passed:this.stats.passed, promptPasses:this.stats.promptPasses };
+      this.duty = { number:record.number+1, passed:this.stats.passed, promptPasses:this.stats.promptPasses, collisions:this.stats.collisions };
       this.emit('dutyClosed', record);
     }
   }
 
   dutyRecord() {
     return { number:this.duty.number, passed:this.stats.passed-this.duty.passed,
-      promptPasses:this.stats.promptPasses-this.duty.promptPasses };
+      promptPasses:this.stats.promptPasses-this.duty.promptPasses, collisions:this.stats.collisions-this.duty.collisions };
   }
 
   move(v,lane,index,dt,profile) {
@@ -239,7 +243,8 @@ export class Simulation {
     const gap=Math.max(0,limit-v.s);
     target=Math.min(target,Math.sqrt(2*def.brake*gap));
     if(v.broken>0){v.broken-=dt;target=0;}
-    v.speed=Math.max(0,v.speed+clamp(target-v.speed,-def.brake*dt,def.accel*dt));
+    const acceleration=def.accel*(def.bus||def.emergencyPriority?1+this.priorityBoost:1);
+    v.speed=Math.max(0,v.speed+clamp(target-v.speed,-def.brake*dt,acceleration*dt));
     v.s=Math.max(v.s,Math.min(v.s+v.speed*dt,limit));
     if(limit-v.s<.015)v.speed=0;
     if(!v.committed && v.s>stop+.025){
@@ -288,7 +293,7 @@ export class Simulation {
       const critical=Math.min(B.jamLength,(this.map.extent-this.map.entry-B.stopMargin)*.83);
       if(q.length>=critical) { if(q.jam===0){this.stats.jams++;this.emit('jam',{direction:d});}q.jam+=dt; }
       else {if(q.jam>0)this.emit('jamResolved',{direction:d});q.jam=0;}
-      if(q.jam>=(this.mode==='hardcore'?B.hardJamGrace:B.jamGrace)&&!this.invulnerable){this.end('jam');return;}
+      if(q.jam>=this.jamLimit&&!this.invulnerable){this.end('jam');return;}
     }
   }
 
@@ -311,7 +316,7 @@ export class Simulation {
   crash(a,b) {
     if(this.invulnerable)return;
     this.circuit?.clear();
-    a.runnerAt=null;a.crashLeft=B.wreckTime-this.recoveryDiscount;a.speed=0;a.state='Crashed';
+    a.runnerAt=null;a.crashLeft=B.wreckTime-this.towDiscount;a.speed=0;a.state='Crashed';
     if(b){b.runnerAt=null;b.crashLeft=a.crashLeft;b.speed=0;b.state='Crashed';}
     this.stats.collisions++;this.flow=Math.max(1,this.flow-.85);this.stats.score=Math.max(0,this.stats.score-B.collisionPenalty);
     this.emit('collision',{x:a.x,z:a.z,direction:a.direction,pedestrian:!b});
@@ -395,7 +400,7 @@ export class Simulation {
       if(e.phase==='warning' && e.kind==='works') { e.phase='clearing'; e.remaining=0; return; }
     }
     if(e.phase!=='active') {
-      e.phase='active';e.remaining=B.eventDuration-(['works','broken'].includes(e.kind)?this.recoveryDiscount:0);
+      e.phase='active';e.remaining=B.eventDuration-(e.kind==='broken'?this.towDiscount:e.kind==='works'?this.recoveryDiscount:0);
       if(e.kind==='broken') {
         const v=this.vehicles.find(v=>v.active&&!v.committed&&v.direction===e.direction)??this.spawn(e.direction,'car',0);
         if(v)v.broken=e.remaining;

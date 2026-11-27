@@ -17,7 +17,7 @@ export const ROAD_DUTY={duration:150,goal:22,density:.36,tier:1,turns:false,obje
 
 export function highwayIncident(game,kind) {
   const blocked=game.rng()<.5?0:2;
-  const [min,max]=ROAD_DUTY[kind],duration=min+Math.floor(game.rng()*(max-min+1))-game.recoveryDiscount;
+  const [min,max]=ROAD_DUTY[kind],duration=min+Math.floor(game.rng()*(max-min+1))-game.towDiscount;
   const vehicles=(kind==='crash'?['taxi','van']:['bus']).map((kindId,i)=>{
     const def=VEHICLES[kindId],p=rotate(-HIGHWAY.lane,i?2.4:kind==='crash'?-.8:0,blocked);
     const angle=-blocked*Math.PI/2+(kind==='crash'?(i?.10:-.19):0);

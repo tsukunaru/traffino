@@ -28,6 +28,10 @@ try {
   evaluate=async expression=>{const r=await cdp('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description??r.exceptionDetails.text);return r.result.value;};
   const wait=async expression=>{for(let i=0;i<(desktop?650:180);i++){if(await evaluate(`Boolean(${expression})`))return;await sleep(60);}throw Error('Timeout: '+expression);};
   const click=async selector=>{const point=await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e||e.disabled)throw Error('Unavailable button: '+${JSON.stringify(selector)});e.scrollIntoView({block:'center',inline:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});};
+  const learn=async id=>{
+    await click('#skill-'+id);
+    await click('[data-action="learn"][data-value="'+id+'"]');
+  };
   const enterShift=async()=>{
     await click('[data-action="reply"][data-value="traffic"]');
     await wait('document.querySelector(".your-line")&&document.querySelector(".speech-balloon")===document.activeElement');
@@ -90,7 +94,11 @@ try {
     const previousBoot=await evaluate('performance.timeOrigin');
     await evaluate(`localStorage.setItem(${JSON.stringify(SAVE_KEY)},${JSON.stringify(JSON.stringify(legacy))})`);
     await cdp('Page.reload');await wait(`performance.timeOrigin>${previousBoot}&&document.querySelector(".hero")`);await click('[data-action="progress"]');
-    await click('[data-action="learn"][data-value="ledger"]');await click('[data-action="learn"][data-value="dividend"]');
+    await learn('ledger');await learn('dividend');
+    await click('#skill-cleanPay');
+    await evaluate('document.querySelector(".talent-title").scrollIntoView({block:"start"})');
+    await wait('!document.querySelector("#toast").classList.contains("show")');
+    await shot('talents-ru','webp');
     await click('[data-action="review"][data-value="ledger"]');
     check('review quotes balance and next rate',await evaluate('document.querySelector(".promotion-terms").textContent.includes("◈ 5 → 0")&&document.querySelector(".promotion-terms").textContent.includes("◈ 3")'));
     await shot('windows-promotion');await click('[data-action="confirmPromotion"]');
@@ -116,8 +124,13 @@ try {
     await click('[data-action="dispatch"]');await click('[data-action="takeDispatch"][data-value="crash"]');
     await wait('__traffino.game?.highway&&document.querySelector("#road-0")');
     check('highway has only two entrance controls',await evaluate('document.querySelector("#road-1").hidden&&document.querySelector("#road-3").hidden&&__traffino.view.map.id==="highway"'));
-    await click('#road-0');await wait('__traffino.game.vehicles.some(v=>v.active&&v.committed)');
+    const entrance=await evaluate(`(()=>{const a=__traffino,p=a.view.project(-a.game.map.lane,-19,.22);return {x:p.x,y:p.y};})()`);
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...entrance,button:'left',clickCount:1});
+    await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...entrance,button:'left',clickCount:1});
+    await wait('__traffino.game.signals[0]&&__traffino.game.vehicles.some(v=>v.active&&v.committed)');
+    checks.push('clicking the actual north entrance releases its convoy');
     await click('#road-2');await wait('__traffino.game.highway.requested===2&&__traffino.game.signals.every(s=>!s)');
+    await wait('document.querySelector("#road-2").classList.contains("is-pending")');
     await wait('__traffino.game.signals[2]');checks.push('opposite entrance opens after real input and lane clearance');
     await click('[data-action="pause"]');await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');await click('[data-action="menu"]');
     check('district is restored on return',await evaluate('__traffino.view.map.id===__traffino.demo.map.id'));
@@ -207,7 +220,7 @@ try {
   for(const [w,h] of [[320,568],[390,844],[568,320],[844,390],[1024,768],[1280,720],[1280,800],[1920,1080],[2560,1080]]) {
     await viewport(w,h);
     const layout=await evaluate(`(()=>{const controls=[...document.querySelectorAll('.road-control')].map(e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};});return {controls,scroll:document.documentElement.scrollWidth,width:innerWidth,height:innerHeight,canvas:document.querySelector('canvas').getBoundingClientRect().width};})()`);
-    check(`layout ${w}x${h}: ${JSON.stringify(layout)}`,layout.canvas>0&&layout.scroll<=w+1&&layout.controls.every(r=>r.left>=0&&r.top>=0&&r.right<=w+1&&r.bottom<=h+1&&r.width>=44&&r.height>=44));
+    check(`layout ${w}x${h}: ${JSON.stringify(layout)}`,layout.canvas>0&&layout.scroll<=w+1&&layout.controls.every(r=>r.left>=0&&r.top>=0&&r.right<=w+1&&r.bottom<=h+1&&r.width>=44&&r.height>=44&&r.width<=54&&r.height<=54));
     check(`unobstructed road controls ${w}x${h}`,await evaluate(`(()=>{const obstacles=[document.querySelector('.hud'),document.querySelector('#mentor')].filter(e=>!e.hidden).map(e=>e.getBoundingClientRect());return [...document.querySelectorAll('.road-control')].every(e=>{const r=e.getBoundingClientRect();return obstacles.every(o=>r.right<=o.left||r.left>=o.right||r.bottom<=o.top||r.top>=o.bottom);});})()`));
     if(w===390){await shot(production?'production-mobile':'mobile-gameplay');if(production)await shot('town-mobile','webp');}
     if(w===844)await shot(production?'production-landscape':'mobile-landscape');
@@ -215,7 +228,17 @@ try {
   await viewport(1280,720);
   await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'w',code:'KeyW',windowsVirtualKeyCode:87});await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'w',code:'KeyW',windowsVirtualKeyCode:87});
   await wait('document.querySelector("#road-0").getAttribute("aria-pressed")==="true"');checks.push('keyboard command');
+  if(!production){
+    check('only inbound asphalt takes a direction',await evaluate(`(()=>{const {view:v,game:g}=__traffino;
+      const hit=(x,z)=>{const p=v.project(x,z,.22);return v.roadAt(p.x,p.y,g.directions);};
+      return [hit(-1.7,-18),hit(18,-1.7),hit(1.7,18),hit(-18,1.7)].join()==='0,1,2,3' && [hit(0,0),hit(14,14),hit(1.7,-18)].every(d=>d===undefined);})()`));
+  }
+  await shot('signals','webp');
   await cdp('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+  await wait('Number(document.querySelector("#hud-score").dataset.score)>0');
+  const north=await evaluate('(()=>{const r=document.querySelector("#road-0").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
+  await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[north]});await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await wait('document.querySelector("#road-0").getAttribute("aria-pressed")==="false"');checks.push('touch toggles a compact signal');
   const touch=await evaluate('(()=>{const r=document.querySelector("[data-action=pause]").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
   await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch]});await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await wait('document.querySelector(".pause-card")');checks.push('touchscreen button input');
   const pausedTime=production?null:await evaluate('__traffino.game.time');await sleep(150);
@@ -240,7 +263,7 @@ try {
         if(shift===0)check('first duty starts savings for three specialities',await evaluate('document.querySelectorAll(".skill-branch").length===3&&document.querySelectorAll("[data-action=learn]:enabled").length===0'));
         else {
           const root=shift===1?'board':'ledger';
-          await click('[data-action="learn"][data-value="'+root+'"]');
+          await learn(root);
           check(root+' charged once and fitted in city',await evaluate('__traffino.view.postSkills.has("'+root+'")&&__traffino.progress.data.coins')===result.coins-48);
         }
         await click('[data-action="back"]');await wait('document.querySelector(".results")');
@@ -250,11 +273,22 @@ try {
     await shot('results');await click('[data-action="menu"]');await click('[data-action="challenges"]');await click('[data-action="challengeTab"][data-value="session"]');
     const before=await evaluate('__traffino.progress.data.reputation');await click('[data-action="claim"][data-value="cars:session"]');check('session reputation claim',await evaluate('__traffino.progress.data.reputation')>before);
     await click('[data-action="back"]');await click('[data-action="progress"]');await click('[data-action="buy"][data-value="coral"]');await click('[data-action="map"][data-value="harbor"]');check('cosmetic and district selection',await evaluate('__traffino.progress.data.selectedCosmetic==="coral"&&__traffino.progress.data.map==="harbor"'));
-    await click('[data-action="learn"][data-value="radio"]');
-    await click('[data-action="learn"][data-value="dividend"]');
+    await click('#skill-priority');
+    check('capstone lists both missing talents',await evaluate('document.querySelector("#detail-board small").textContent.includes("Dispatch radio + Steady rhythm") && document.querySelector("[data-value=priority][data-action=learn]").disabled'));
+    await learn('radio');
+    await click('#skill-priority');
+    check('capstone still needs the sibling',await evaluate('document.querySelector("#detail-board small").textContent.endsWith("Steady rhythm")'));
+    await learn('dividend');
+    await click('#skill-survey');
+    await evaluate('document.querySelector(".talent-title").scrollIntoView({block:"start"})');
+    await shot('talents','webp');
     await click('[data-action="postView"]');await wait('Math.abs(__traffino.view.currentZoom-__traffino.view.zoom)<.04&&Math.abs(__traffino.view.cameraAngle-(__traffino.view.baseAngle+.42))<.02');
     check('tour shows equipped station',await evaluate('__traffino.view.inspectPost&&__traffino.view.postSkills.size===4'));
     await shot('duty-station');await click('[data-action="back"]');
+    await viewport(390,844);await learn('rhythm');
+    await click('#skill-priority');
+    check('mobile tree spends shift wages and discloses the remaining price',await evaluate('document.querySelector(".panel").scrollWidth<=document.querySelector(".panel").clientWidth+1 && !document.querySelector("#skill-priority").classList.contains("locked") && document.querySelector("#detail-board small").textContent.includes("Still needed")'));
+    await viewport(1280,720);
     const purse=await evaluate('__traffino.progress.data.coins');
     await click('[data-action="review"][data-value="board"]');
     check('promotion gives cancellation keyboard focus',await evaluate('document.activeElement.dataset.action==="cancelConfirm"'));

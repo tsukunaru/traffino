@@ -19,6 +19,51 @@ test('old profiles keep earnings and receive service credit exactly once', () =>
   assert.deepEqual(parseSave({ ...freshSave(), career: malformed }).career, { served: 0, learned: ['ledger', 'dividend'], certified: [] });
 });
 
+test('branch choices survive migration and a capstone needs both talents',()=>{
+  const p=new Progress();
+  p.data=parseSave({...freshSave(),version:4,coins:500,career:{served:90,certified:[],learned:['ledger','cleanPay','volume']}});
+  assert.deepEqual(p.data.career.learned,['ledger','cleanPay']);
+  assert.ok(p.canPromote('ledger'));
+  assert.equal(p.learn('volume'),false);
+  assert.ok(p.learn('dividend'));
+  assert.ok(p.learn('volume'));
+  assert.equal(p.learn('volume'),false);
+  assert.equal(p.data.coins,500-96-150);
+  const restored=parseSave(p.data).career;
+  assert.deepEqual(new Set(restored.learned),new Set(p.data.career.learned));
+  assert.equal(restored.served,90);
+});
+
+test('safe-duty and volume premiums apply only to each qualified pay period',()=>{
+  const p=new Progress();
+  p.data.career.learned=['ledger','dividend','cleanPay','volume'];
+  const g=new Simulation({mode:'endless',director:false,emit:(name,record)=>{if(name==='dutyClosed')p.closeDuty(record);}});
+  for(const [period,passed,crashes,banked] of [[1,16,1,40],[2,17,0,90],[3,15,0,90]]){
+    g.stats.passed+=passed;g.stats.collisions+=crashes;g.elapsed=period*SERVICE.dutySeconds;g.tick();
+    assert.equal(p.data.coins,banked);
+  }
+  g.end('quit');
+  assert.equal(p.finish(g).coins,90);
+});
+
+test('traffic and recovery talents change live vehicles, flow and clearance',()=>{
+  const run=(skills,kind)=>{
+    const g=new Simulation({director:false,skills,seed:3}),car=g.spawn(0,kind,0);
+    car.speed=0;g.flow=2;g.tick();
+    return {speed:car.speed,flow:g.flow,jam:g.jamLimit};
+  };
+  for(const kind of ['bus','ambulance','car']){
+    const base=run([],kind),trained=run(['rhythm','priority','reserve'],kind);
+    assert.ok(Math.abs(trained.speed-base.speed*(kind==='car'?1:1.2))<1e-8);
+    assert.ok(trained.flow>base.flow);
+    assert.equal(trained.jam,base.jam+SERVICE.jamSeconds);
+  }
+  for(const incident of ['crash','repair']){
+    const scene=skills=>new Simulation({mode:'highway',incident,seed:11,skills}).highway.duration;
+    assert.equal(scene([])-scene(['crew','tow']),SERVICE.crewSeconds+SERVICE.towSeconds);
+  }
+});
+
 test('v3 profiles keep certified equipment, unspent savings and current term traffic',()=>{
   const old={...freshSave(),version:3,coins:76,totals:{passed:200},career:{served:12,learned:['radio'],certified:['board']}};
   const restored=parseSave(old);

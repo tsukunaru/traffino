@@ -17,7 +17,7 @@ export class CityView {
     this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.06;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this.canvas=this.renderer.domElement;host.append(this.canvas);this.camera=new THREE.OrthographicCamera(-40,40,30,-30,.1,200);
     this.baseAngle=0;this.cameraAngle=.42;this.zoom=1;this.currentZoom=1;this.up=new THREE.Vector3(0,1,0);
-    this.scratch=new THREE.Object3D();this.carRoot=new THREE.Object3D();this.matrix=new THREE.Matrix4();this.projected=new THREE.Vector3();this.color=new THREE.Color();this.skyColor=new THREE.Color();this.floorColor=new THREE.Color();this.sunColor=new THREE.Color();
+    this.scratch=new THREE.Object3D();this.carRoot=new THREE.Object3D();this.matrix=new THREE.Matrix4();this.projected=new THREE.Vector3();this.roadRay=new THREE.Raycaster();this.roadPlane=new THREE.Plane(this.up,-.22);this.color=new THREE.Color();this.skyColor=new THREE.Color();this.floorColor=new THREE.Color();this.sunColor=new THREE.Color();
     this.geometry={cone:new THREE.ConeGeometry(.5,1,8),box:new RoundedBoxGeometry(1,1,1,1,.08),sphere:new THREE.IcosahedronGeometry(.5,1),cylinder:new THREE.CylinderGeometry(.5,.5,1,10),torus:new THREE.TorusGeometry(.35,.10,8,12),plane:new THREE.PlaneGeometry(1,1)};this.materials=new Map();
     const silhouette=new THREE.Shape();
     silhouette.moveTo(-.5,-.46);silhouette.lineTo(.5,-.46);silhouette.lineTo(.48,-.22);silhouette.lineTo(.29,.45);
@@ -135,7 +135,16 @@ export class CityView {
   resize() {const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.width=w;this.height=h;this.renderer.setSize(w,h);this.setProjection();}
   setProjection() {const a=this.width/this.height,span=Math.max(53,(this.map.extent*2+21)/a)/this.currentZoom;this.camera.left=-span*a/2;this.camera.right=span*a/2;this.camera.top=span/2;this.camera.bottom=-span/2;this.camera.updateProjectionMatrix();}
   project(x,z,y=0) {this.projected.set(x,y,z).project(this.camera);return {x:(this.projected.x*.5+.5)*this.width,y:(-.5*this.projected.y+.5)*this.height};}
-  roadPoint(direction) {const p=rotate(-this.map.width/2-6.8,this.map.id==='highway'?-21:-12.5,direction);return this.project(p.x,p.z,.4);}
+  roadAt(x,y,directions) {
+    this.roadRay.setFromCamera({x:2*x/this.width-1,y:1-2*y/this.height},this.camera);
+    const hit=this.roadRay.ray.intersectPlane(this.roadPlane,this.projected);
+    if(!hit)return;
+    return directions.find(d=>{
+      const lane=rotate(hit.x,hit.z,(4-d)%4);
+      return lane.x>=-this.map.width/2 && lane.x<=0 && lane.z>=-this.map.extent && lane.z<=-this.map.entry;
+    });
+  }
+  roadPoint(direction) {const p=rotate(-this.map.width/2-4.2,this.map.id==='highway'?-21:-13.5,direction);return this.project(p.x,p.z,.4);}
   crossingPoint(direction) {const p=rotate(4.6,-this.map.entry-.8,direction);return this.project(p.x,p.z,.5);}
   burst(x,z,color=0xffd780,count=9) {if(this.qualityLevel==='low')count=Math.min(count,4);for(let i=0;i<count;i++){const p=this.effects[this.effectIndex++%this.effects.length],a=i*2.399+this.effectIndex;Object.assign(p,{x,z,y:.6,life:.7+i%3*.09,vx:Math.sin(a)*(1+i%3),vz:Math.cos(a)*(1+i%3),vy:1.6+i%3*.55,color,size:.12+i%3*.05});}}
   event(name,data={}) {

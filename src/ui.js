@@ -4,7 +4,7 @@ import { translator } from './i18n.js';
 const icons={survey:'M3 4l6-2 6 2 6-2v17l-6 2-6-2-6 2zM9 2v17m6-15v17',crew:'M4 15h16m-15 0v-3a7 7 0 0 1 5-7m4 0a7 7 0 0 1 5 7v3m-9-7V3h4v5M3 16h18v3H3z',board:'M3 3h18v14H3zM8 21l2-4m4 0 2 4M7 12V7m-2 2 2-2 2 2m4 4v-2l4-3m-3 0h3v3',radio:'M6 9h12v12H6zM8 9V2m5 2q3 0 4 3m-5 5h3m-6 4h6',ledger:'M5 3h13a1 1 0 0 1 1 1v17H6a2 2 0 0 1-2-2V5a2 2 0 0 1 1-2zM8 3v15m3-10h5m-5 4h5',dividend:'M3 6h18v13H3zM3 10h18m-12 6 3-3 2 1 3-3',play:'M8 5l11 7-11 7z',pause:'M8 5v14M16 5v14',back:'M14 5l-7 7 7 7',gear:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2',car:'M5 9l2-5h10l2 5M4 9h16v9H4zM6 18v3M18 18v3M7 13h2M15 13h2',star:'M12 3l3 6 6 1-4.5 4.5 1 6-5.5-3-5.5 3 1-6L3 10l6-1z',flag:'M5 22V3l14 1v10L5 13',clock:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 7v6l4 2',person:'M12 3v1M9 8h6M12 6v9M7 12l5-5 5 5M12 15l-4 6M12 15l4 6',camera:'M3 7h5l2-3h4l2 3h5v14H3zM12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8',sound:'M3 9h4l5-4v14l-5-4H3zM16 8q5 4 0 8',lock:'M6 10h12v11H6zM8 10V6a4 4 0 0 1 8 0v4'};
 export const icon=(name)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${icons[name]??icons.star}"/></svg>`;
 export class UI {
-  constructor(app) {this.app=app;this.root=document.querySelector('#ui');this.toastElement=document.querySelector('#toast');this.hudRefs=null;this.lastAnnouncement='';this.root.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b&&!b.disabled)app.action(b.dataset.action,b.dataset.value,b);});this.root.addEventListener('input',e=>{if(e.target.dataset.setting)app.setting(e.target.dataset.setting,e.target.type==='checkbox'?e.target.checked:e.target.type==='range'?Number(e.target.value):e.target.value);if(e.target.dataset.photo)app.photoSetting(e.target.dataset.photo,Number(e.target.value));});}
+  constructor(app) {this.app=app;this.root=document.querySelector('#ui');this.toastElement=document.querySelector('#toast');this.selectedSkills={};this.hudRefs=null;this.lastAnnouncement='';this.root.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b&&!b.disabled)app.action(b.dataset.action,b.dataset.value,b);});this.root.addEventListener('input',e=>{if(e.target.dataset.setting)app.setting(e.target.dataset.setting,e.target.type==='checkbox'?e.target.checked:e.target.type==='range'?Number(e.target.value):e.target.value);if(e.target.dataset.photo)app.photoSetting(e.target.dataset.photo,Number(e.target.value));});}
   get t() {return translator(this.app.language);}
   objectives(level,stats) {return (level?.objectives??[]).map(o=>`${this.t(o.stat)}: ${stats?Math.min(stats[o.stat],o.target)+'/':''}${o.target}`).join(' · ');}
   button(text,action,value='',cls='',disabled=false,ic='') {return `<button class="${cls}" data-action="${action}" data-value="${value}" ${disabled?'disabled':''}>${ic?icon(ic):''}<span>${text}</span></button>`;}
@@ -50,14 +50,14 @@ export class UI {
       </article></div>`;
   }
   dispatch(){
-    const t=this.t, discount=this.app.progress.hasSkill('crew')?SERVICE.crewSeconds:0;
+    const t=this.t, discount=(this.app.progress.hasSkill('crew')?SERVICE.crewSeconds:0)+(this.app.progress.hasSkill('tow')?SERVICE.towSeconds:0);
     const range=kind=>ROAD_DUTY[kind].map(seconds=>seconds-discount).join('–')+t('seconds');
     return `<div class="brief-stage"><div class="dialogue-bar">${this.button(t('back'),'back','','',false,'back')}<span>M 17</span></div>
       <article class="brief conversation panel"><div class="conversation-scene"><figure class="mentor-print"><img src="./assets/miro-portrait.jpg" width="640" height="640" alt=""><figcaption><strong>${t('miroName')}</strong><span>${t('miroRole')}</span></figcaption></figure>
       <div class="dialogue-lines"><h1>${t('bridgeDuty')}</h1><p class="speech-balloon">${t('bridgeBrief')}</p><p>${t('bridgeQuota')}</p></div></div>
       <div class="reply-strip"><small>${t('chooseDispatch')}</small><div>${this.button(t('roadRepair')+' · '+range('repair'),'takeDispatch','repair','reply-choice ready')}${this.button(t('roadCrash')+' · '+range('crash'),'takeDispatch','crash','reply-choice')}</div></div></article></div>`;
   }
-  hud() {const t=this.t,g=this.app.game;return `<header class="hud"><div class="hud-brand">traffino${g.mode==='hardcore'?`<small class="hardcore-label">${t('hardcore')}</small>`:''}<span>${t(g.mode==='story'?'shift':'day')} <b id="hud-day">1</b></span></div><div class="score-box"><span>${t('score')}</span><strong id="hud-score">0</strong><small id="hud-pay" title="${t('wageTerms')}">◈ 0</small></div><div class="flow-box"><span>${t('flow')}</span><strong id="hud-flow">×1.0</strong><div class="flow-track"><i id="flow-fill"></i></div></div><div class="time-box"><span id="hud-phase">${t('morning')}</span><strong id="hud-time">06:00</strong></div><div class="hud-actions">${this.button(t('routes'),'routes','','round',false,'car')}${this.button(t('pause'),'pause','','round',false,'pause')}</div></header><div id="event-banner" role="status"></div><div id="emergency-banner" role="status"></div><div class="road-controls">${DIRS.map((d,i)=>`<button class="road-control" id="road-${i}" data-action="toggle" data-value="${i}" aria-label="${t(d)}"><span class="road-name">${t(d)} <kbd>${['W','D','S','A'][i]}</kbd></span><strong class="signal-state">${t('stopped')}</strong><span class="road-info"><b class="turn-arrow">↑</b> <span class="queue-count">0</span> ${icon('car')}</span><span class="jam-count"></span></button><button id="ped-${i}" class="ped-control" data-action="pedestrian" data-value="${i}" aria-label="${t('pedButton')} ${t(d)}" hidden>${icon('person')}<span>0</span></button>`).join('')}</div><footer class="game-footer"><div class="game-help"><span>${t('controls')}</span><span id="hud-goal"></span><span id="hud-objectives"></span></div><button id="detour" data-action="detour" hidden></button>${this.button(t('allStop'),'stopAll','','stop-all')}</footer><aside id="mentor" class="mentor-note"><img class="mentor-thumb" src="./assets/miro-portrait.jpg" width="56" height="62" alt=""><div class="radio-copy"><small>${t('miroName')} <b></b></small><div role="status" aria-live="polite" aria-atomic="true"><strong></strong><p></p></div></div></aside><div class="orientation-note">${t('orientation')}</div>`;}
+  hud() {const t=this.t,g=this.app.game;return `<header class="hud"><div class="hud-brand">traffino${g.mode==='hardcore'?`<small class="hardcore-label">${t('hardcore')}</small>`:''}<span>${t(g.mode==='story'?'shift':'day')} <b id="hud-day">1</b></span></div><div class="score-box"><span>${t('score')}</span><strong id="hud-score">0</strong><small id="hud-pay" title="${t('wageTerms')}">◈ 0</small></div><div class="flow-box"><span>${t('flow')}</span><strong id="hud-flow">×1.0</strong><div class="flow-track"><i id="flow-fill"></i></div></div><div class="time-box"><span id="hud-phase">${t('morning')}</span><strong id="hud-time">06:00</strong></div><div class="hud-actions">${this.button(t('routes'),'routes','','round',false,'car')}${this.button(t('pause'),'pause','','round',false,'pause')}</div></header><div id="event-banner" role="status"></div><div id="emergency-banner" role="status"></div><div class="road-controls">${DIRS.map((d,i)=>`<button class="road-control" id="road-${i}" data-action="toggle" data-value="${i}" aria-keyshortcuts="${['W ArrowUp','D ArrowRight','S ArrowDown','A ArrowLeft'][i]}" aria-label="${t(d)}"><span class="signal-chip" aria-hidden="true"><i></i><kbd>${['W','D','S','A'][i]}</kbd><b class="compass">${t(d).slice(0,1)}</b></span><span class="signal-state"></span><span class="lane-readout" aria-hidden="true"><b class="turn-arrow"></b><span class="queue-count"></span><strong class="jam-count"></strong></span></button><button id="ped-${i}" class="ped-control" data-action="pedestrian" data-value="${i}" aria-label="${t('pedButton')} ${t(d)}" hidden>${icon('person')}<span>0</span></button>`).join('')}</div><footer class="game-footer"><div class="game-help"><span>${t('controls')}</span><span id="hud-goal"></span><span id="hud-objectives"></span></div><button id="detour" data-action="detour" aria-keyshortcuts="R" hidden></button><button class="stop-all" data-action="stopAll" aria-keyshortcuts="Space"><kbd aria-hidden="true">␣</kbd>${t('allStop')}</button></footer><aside id="mentor" class="mentor-note"><img class="mentor-thumb" src="./assets/miro-portrait.jpg" width="56" height="62" alt=""><div class="radio-copy"><small>${t('miroName')} <b></b></small><div role="status" aria-live="polite" aria-atomic="true"><strong></strong><p></p></div></div></aside><div class="orientation-note">${t('orientation')}</div>`;}
   cacheHUD() {
     this.hudRefs={};for(const id of ['hud-day','hud-score','hud-pay','hud-flow','flow-fill','hud-time','hud-phase','event-banner','emergency-banner','hud-goal','mentor','detour'])this.hudRefs[id]=this.root.querySelector('#'+id);
     this.roadRefs=DIRS.map((_,i)=>{const button=this.root.querySelector('#road-'+i);return {button,state:button.querySelector('.signal-state'),queue:button.querySelector('.queue-count'),turn:button.querySelector('.turn-arrow'),jam:button.querySelector('.jam-count'),ped:this.root.querySelector('#ped-'+i)};});
@@ -105,15 +105,21 @@ export class UI {
       el.button.hidden=!g.directions.includes(d);
       el.button.classList.toggle('circuit-served', g.circuit?.has(d) ?? false);
       el.button.style.left=point.x+'px';el.button.style.top=point.y+'px';el.button.classList.toggle('is-go',g.signals[d]);el.button.classList.toggle('is-danger',danger);el.button.classList.toggle('tutorial-pulse',g.tutorial===0||g.tutorial===1&&g.stats.passed>0?d===0:g.tutorial===2?d===1:false);
-      el.button.setAttribute('aria-pressed',String(g.signals[d]));el.button.setAttribute('aria-label',`${t(DIRS[d])}: ${t(g.signals[d]?'go':'stopped')}, ${t('queue')} ${q.count}${danger?', '+t('danger'):''}`);
-      el.state.textContent=t(g.highway?.requested===d&&!g.signals[d]?'queuedGreen':g.signals[d]?'go':'stopped');el.queue.textContent=q.count;
+      const pending=g.highway?.requested===d&&!g.signals[d];
+      el.button.classList.toggle('is-pending',pending);
+      el.button.setAttribute('aria-pressed',String(g.signals[d]));
+      el.state.textContent=t(pending?'queuedGreen':g.signals[d]?'go':'stopped');
+      el.queue.textContent=q.count>0?String(q.count):'';
       const lane=g.lanes[d], first=lane.findIndex(car=>car.active&&!car.committed);
       const lead=lane[first], next=first>=0 && this.app.progress.hasSkill('board') && lane.find((car,index)=>index>first&&car.active&&!car.committed);
       const arrows=['↑','↰','↱'];
-      el.turn.textContent=(lead?arrows[lead.turn]:'·')+(next?' › '+arrows[next.turn]:'');
-      if(next)el.button.setAttribute('aria-label',el.button.getAttribute('aria-label')+', '+t('secondTurn')+' '+t(['turnStraight','turnLeft','turnRight'][next.turn]));
-      el.jam.textContent=q.jam>0?`${t('jamWarning')} ${Math.max(0,Math.ceil((g.mode==='hardcore'?B.hardJamGrace:B.jamGrace)-q.jam))}`:danger?'!':'';
-      const crossing=v.crossingPoint(d),active=g.people.some(p=>p.active&&p.direction===d);el.ped.hidden=!g.waitingPeople[d]&&!active;el.ped.style.left=crossing.x+'px';el.ped.style.top=crossing.y+'px';el.ped.querySelector('span').textContent=active?'•••':g.waitingPeople[d];el.ped.disabled=active;el.ped.classList.toggle('walking',active);
+      el.turn.textContent=(lead?arrows[lead.turn]:'')+(next?' › '+arrows[next.turn]:'');
+      el.jam.textContent=q.jam>0?'! '+Math.max(0,Math.ceil(g.jamLimit-q.jam)):danger?'!':'';
+      const turns=['turnStraight','turnLeft','turnRight'];
+      const label=[t(DIRS[d]),el.state.textContent,t('queue')+' '+q.count,lead&&t(turns[lead.turn]),next&&t('secondTurn')+' '+t(turns[next.turn]),el.jam.textContent&&(t(q.jam>0?'jamWarning':'danger')+' '+el.jam.textContent)].filter(Boolean).join(' · ');
+      const action=t(pending?'cancelGreen':g.signals[d]?'closeLane':'openLane');
+      el.button.setAttribute('aria-label',label+' · '+action);el.button.title=label+' · '+action;
+      const crossing=v.crossingPoint(d),active=g.people.some(p=>p.active&&p.direction===d);el.ped.hidden=!g.waitingPeople[d]&&!active;el.ped.style.left=crossing.x+'px';el.ped.style.top=crossing.y+'px';el.ped.querySelector('span').textContent=active?'•••':g.waitingPeople[d];el.ped.disabled=active;el.ped.classList.toggle('walking',active);el.ped.setAttribute('aria-label',t('pedButton')+' · '+t(DIRS[d])+' · '+g.waitingPeople[d]);
     }
     const teaching=g.mode==='story'&&(g.tutorial<4||g.elapsed<9);
     r.mentor.hidden=!teaching;
@@ -142,24 +148,34 @@ export class UI {
   }
   station() {
     const p=this.app.progress, t=this.t, term=p.data.career, target=SERVICE.promotionTargets[p.grade];
-    const branches=TRAINING.filter(skill=>!skill.requires).map(root=>{
-      const nodes=TRAINING.filter(skill=>skill.id===root.id || skill.requires===root.id).map(skill=>{
-        const owned=p.hasSkill(skill.id), permanent=term.certified.includes(skill.id);
-        const locked=skill.requires && !p.hasSkill(skill.requires);
-        const text=permanent?t('permanent'):owned?t('installed'):locked?t('needSkill')+' · '+t('skill_'+skill.requires):t('equip')+' · ◈ '+skill.cost;
-        const shortfall=locked?'◈ '+skill.cost:!owned&&p.data.coins<skill.cost?t('needCoins')+' ◈ '+(skill.cost-p.data.coins):'';
-        const effect=t('effect_'+skill.id).replace('{seconds}',SERVICE.radioSeconds).replace('{coins}',SERVICE.premium).replace('{wait}',B.timelyWait).replace('{flow}',SERVICE.premiumFlow).replace('{lead}',SERVICE.warningLead).replace('{cut}',SERVICE.crewSeconds);
-        return `<li class="skill-node ${owned?'owned':''}"><span class="equipment-icon">${icon(skill.id)}</span><div><h3 tabindex="-1" id="skill-${skill.id}">${t('skill_'+skill.id)}</h3><p>${effect}</p>
-          ${this.button(text,'learn',skill.id,'skill-buy',!p.canLearn(skill))}${shortfall?`<small>${shortfall}</small>`:''}</div></li>`;
-      }).join('');
-      return `<article class="skill-branch branch-${root.id}"><h2>${t({board:'branchBoard',ledger:'branchLedger',survey:'branchSurvey'}[root.id])}</h2><ol>${nodes}</ol></article>`;
+    const branches=TRAINING.filter(skill=>!skill.requires.length).map(root=>{
+      const skills=TRAINING.filter(skill=>skill.branch===root.id);
+      const selected=skills.find(skill=>skill.id===this.selectedSkills[root.id])??root;
+      const node=skill=>{
+        const owned=p.hasSkill(skill.id),locked=skill.requires.some(id=>!p.hasSkill(id));
+        return `<button id="skill-${skill.id}" class="talent-node ${owned?'owned':locked?'locked':''}" data-action="inspectSkill" data-value="${skill.id}" aria-pressed="${skill===selected}" aria-controls="detail-${root.id}">
+          <span>${t('skill_'+skill.id)}</span><small>${owned?'✓ '+t('installed'):'◈ '+skill.cost}</small></button>`;
+      };
+      const missing=selected.requires.filter(id=>!p.hasSkill(id)),owned=p.hasSkill(selected.id);
+      const hint=missing.length?t('needSkill')+' · '+missing.map(id=>t('skill_'+id)).join(' + '):!owned&&p.data.coins<selected.cost?t('needCoins')+' ◈ '+(selected.cost-p.data.coins):'';
+      const values={seconds:SERVICE.radioSeconds,coins:SERVICE.premium,wait:B.timelyWait,flow:SERVICE.premiumFlow,lead:SERVICE.warningLead,cut:SERVICE.crewSeconds,decay:SERVICE.flowRetention*100,accel:SERVICE.priorityAcceleration*100,bonus:SERVICE.cleanBonus,every:SERVICE.volumeStep,jam:SERVICE.jamSeconds,tow:SERVICE.towSeconds};
+      const effect=t('effect_'+selected.id).replace(/\{(\w+)\}/g,(_,key)=>values[key]);
+      const buy=term.certified.includes(selected.id)?t('permanent'):owned?t('installed'):t('equip')+' · ◈ '+selected.cost;
+      return `<article class="skill-branch branch-${root.id}"><h2>${icon(root.id)}${t({board:'branchBoard',ledger:'branchLedger',survey:'branchSurvey'}[root.id])}</h2>
+        <div class="talent-map">${node(root)}<div class="talent-split">${skills.filter(skill=>skill.requires.length===1).map(node).join('')}</div>${node(skills.find(skill=>skill.requires.length===2))}</div>
+        <div class="talent-detail" id="detail-${root.id}"><h3>${t('skill_'+selected.id)}</h3><p>${effect}</p>${hint?`<small>${hint}</small>`:''}
+        ${this.button(buy,'learn',selected.id,'skill-buy',!p.canLearn(selected))}</div></article>`;
     }).join('');
     return `<div class="service-banner"><div><span class="dispatch-kicker">${t('serviceDesk')}</span><h1>${t('grade'+p.grade)}</h1>
       <div class="service-facts"><div><b>◈ ${p.payRate}</b><small>${t('payEach')}</small></div><div><b>${term.served}${target?` <em>/ ${target}</em>`:''}</b><small>${t('serviceCount')}</small></div></div></div>
       ${this.button(t('postTour'),'postView','','post-tour',false,'camera')}</div>
-      <div class="skill-tree">${branches}</div><section class="review-card"><span class="dispatch-kicker">${t('gradeReview')}</span><h2>${t('grade'+(target?p.grade+1:p.grade))}</h2>
+      <div class="talent-title"><h2>${t('readyToEquip')}</h2><b>${t('coins')} · ◈ ${p.data.coins}</b></div><div class="skill-tree">${branches}</div><section class="review-card"><span class="dispatch-kicker">${t('gradeReview')}</span><h2>${t('grade'+(target?p.grade+1:p.grade))}</h2>
       <p>${t(target?'gradeInstruction':'finalGrade')}</p>${target?`<progress value="${term.served}" max="${target}" aria-label="${t('serviceCount')}"></progress>
-      <div class="cert-options">${TRAINING.filter(skill=>!skill.requires&&!term.certified.includes(skill.id)).map(skill=>this.button(t('certify')+' · '+t('skill_'+skill.id),'review',skill.id,'',!p.canPromote(skill.id))).join('')}</div>`:''}</section>`;
+      <div class="cert-options">${TRAINING.filter(skill=>!skill.requires.length&&!term.certified.includes(skill.id)).map(skill=>this.button(t('certify')+' · '+t('skill_'+skill.id),'review',skill.id,'',!p.canPromote(skill.id))).join('')}</div>`:''}</section>`;
+  }
+  inspectSkill(id) {
+    const skill=TRAINING.find(item=>item.id===id);
+    if(skill){this.selectedSkills[skill.branch]=id;this.refreshStation(id);}
   }
   refreshStation(focusId) {
     const top=this.root.querySelector('.panel').scrollTop;

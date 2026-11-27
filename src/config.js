@@ -46,14 +46,21 @@ export const STORY = [
 ];
 export const EVENTS = ['broken', 'works', 'turn', 'surge', 'wave', 'delivery'];
 export const TRAINING = [
-  { id: 'board', cost: 48 },
-  { id: 'radio', cost: 96, requires: 'board' },
-  { id: 'ledger', cost: 48 },
-  { id: 'dividend', cost: 96, requires: 'ledger' },
-  { id: 'survey', cost: 42 },
-  { id: 'crew', cost: 88, requires: 'survey' },
+  { id:'board', branch:'board', cost:48, requires:[] },
+  { id:'radio', branch:'board', cost:96, requires:['board'] },
+  { id:'rhythm', branch:'board', cost:80, requires:['board'] },
+  { id:'priority', branch:'board', cost:145, requires:['radio','rhythm'] },
+  { id:'ledger', branch:'ledger', cost:48, requires:[] },
+  { id:'dividend', branch:'ledger', cost:96, requires:['ledger'] },
+  { id:'cleanPay', branch:'ledger', cost:84, requires:['ledger'] },
+  { id:'volume', branch:'ledger', cost:150, requires:['dividend','cleanPay'] },
+  { id:'survey', branch:'survey', cost:42, requires:[] },
+  { id:'crew', branch:'survey', cost:88, requires:['survey'] },
+  { id:'reserve', branch:'survey', cost:76, requires:['survey'] },
+  { id:'tow', branch:'survey', cost:135, requires:['crew','reserve'] },
 ];
-export const SERVICE = { promotionTargets: [90, 160, 240], dutySeconds: 120, dutyGoal: 16, rushGoal: 24, medalCoins: 2, warningLead: 4, crewSeconds: 3, runnerWarning: 4, radioSeconds: 6, premium: 1, premiumFlow: 2 };
+export const SERVICE = { promotionTargets: [90, 160, 240], dutySeconds: 120, dutyGoal: 16, rushGoal: 24, medalCoins: 2, warningLead: 4, crewSeconds: 3, runnerWarning: 4, radioSeconds: 6, premium: 1, premiumFlow: 2,
+  flowRetention: .35, priorityAcceleration: .2, cleanBonus: 8, volumeStep: 4, jamSeconds: 3, towSeconds: 3 };
 export const RANKS = [0, 150, 420, 900, 1700, 3000];
 export const COSMETICS = [{ id: 'classic', cost: 0, color: 0x3a736a }, { id: 'coral', cost: 120, color: 0xce705b }, { id: 'indigo', cost: 240, color: 0x77789c }];
 export const MISSIONS = [

@@ -1,7 +1,7 @@
 import { VEHICLES, MISSIONS, COSMETICS, BALANCE as B, RANKS, INTERSECTIONS, AD_COINS, TRAINING, SERVICE } from './config.js';
 import { clamp, medalFor } from './systems.js';
 export const SAVE_KEY='traffino.save.v2';
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 export function futureSave(raw) {try{return (typeof raw==='string'?JSON.parse(raw):raw)?.version>SAVE_VERSION;}catch{return false;}}
 const integer=(v, max=1e12)=>Number.isFinite(v)?clamp(Math.floor(v),0,max):0;
 const statistic=v=>Number.isFinite(v)?clamp(v,0,1e12):0;
@@ -12,7 +12,7 @@ export function parseSave(raw) {
   try {
     const x=typeof raw==='string'?JSON.parse(raw):raw;
     if(!x||typeof x!=='object'||Array.isArray(x))return null;
-    if(![1, 2, 3, SAVE_VERSION].includes(x.version))return null;
+    if(![1, 2, 3, 4, SAVE_VERSION].includes(x.version))return null;
     const s=freshSave();
     s.updatedAt=integer(x.updatedAt,Number.MAX_SAFE_INTEGER);
     for(const k of ['revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
@@ -25,8 +25,8 @@ export function parseSave(raw) {
       const learned = Array.isArray(x.career?.learned) ? x.career.learned : [];
       const certified = Array.isArray(x.career?.certified) ? x.career.certified : [];
       for (const skill of TRAINING) {
-        if (!skill.requires && certified.includes(skill.id)) career.certified.push(skill.id);
-        else if (learned.includes(skill.id) && (!skill.requires || career.learned.includes(skill.requires) || career.certified.includes(skill.requires))) {
+        if (!skill.requires.length && certified.includes(skill.id)) career.certified.push(skill.id);
+        else if (learned.includes(skill.id) && skill.requires.every(id=>career.learned.includes(id)||career.certified.includes(id))) {
           career.learned.push(skill.id);
         }
       }
@@ -111,6 +111,7 @@ export class Progress {
     if (this.finishedReward || record.number <= this.lastDuty) return 0;
     this.lastDuty = record.number;
     if (!qualified) return 0;
+    if (this.hasSkill('cleanPay') && record.collisions===0) bonus+=SERVICE.cleanBonus;
     const wages = this.wages(record), total = wages + bonus;
     this.payroll.wages += wages;
     this.payroll.premium += wages - record.passed * this.payRate;
@@ -173,11 +174,12 @@ export class Progress {
   }
   wages(stats) {
     const premium = this.hasSkill('dividend') ? (stats.promptPasses ?? 0) * SERVICE.premium : 0;
-    return stats.passed * this.payRate + premium;
+    const volume = this.hasSkill('volume') ? Math.floor(stats.passed / SERVICE.volumeStep) : 0;
+    return stats.passed * this.payRate + premium + volume;
   }
   canLearn(skill) {
     return Boolean(skill) && !this.readOnly && !this.hasSkill(skill.id) && this.data.coins >= skill.cost
-      && (!skill.requires || this.hasSkill(skill.requires));
+      && skill.requires.every(id=>this.hasSkill(id));
   }
   learn(id) {
     const skill = TRAINING.find(item => item.id === id);
@@ -189,9 +191,8 @@ export class Progress {
   }
   canPromote(root) {
     const { served, certified } = this.data.career;
-    const advanced = TRAINING.find(skill => skill.requires && skill.requires === root);
-    return !this.readOnly && Boolean(advanced) && !certified.includes(root)
-      && this.hasSkill(advanced.id) && served >= SERVICE.promotionTargets[this.grade];
+    const qualified=TRAINING.some(skill=>skill.branch===root && skill.requires.includes(root) && this.hasSkill(skill.id));
+    return !this.readOnly && qualified && !certified.includes(root) && served >= SERVICE.promotionTargets[this.grade];
   }
   promote(root) {
     if (!this.canPromote(root)) return false;

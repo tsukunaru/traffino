@@ -45,24 +45,51 @@
 .post-tour,.post-label button {position:relative;z-index:1;min-height:36px;background:#f4e5c0;color:#2e4a40;font-size:13px;font-weight:850;border:1px solid #c4ad84;border-radius:9px}
 .skill-tree {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin:18px 0}
 .skill-branch {--branch:#3c6b5d;--light:#d6e7d7;border:1px solid #c6b69b;border-radius:13px;background:#fff9eb;overflow:hidden}
+.road-controls .road-control {position:absolute;display:grid;place-items:center;width:50px;height:48px;min-height:48px;min-width:50px;padding:0;gap:0;border:0;border-radius:12px;background:none;box-shadow:none;transform:translate(-50%,-50%);z-index:2;touch-action:manipulation}
+.road-controls .road-control:is(:hover,:active):not(:disabled) {background:none;box-shadow:none;transform:translate(-50%,-50%)}
+.road-controls .road-control[hidden] {display:none}
+.signal-chip {display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:39px;height:23px;padding:0 5px;background:#263f40;color:#fff3d4;border:1px solid #fff3d9;border-radius:8px;box-shadow:0 2px 0 #4f4234,0 3px 5px #33281c4d}
+.signal-chip kbd,.signal-chip b {font:800 11px/1 system-ui}.signal-chip .compass {display:none}
+.signal-chip i {position:relative;width:14px;height:14px;border-radius:50%;background:#ff977f}
+.signal-chip i::after {content:"";position:absolute;inset:6px 3px 5px;background:#592d29;border-radius:1px}
+.is-go .signal-chip i {background:#97e1aa}.is-go .signal-chip i::after {inset:3px 3px 3px 5px;background:#234e3d;clip-path:polygon(0 0,100% 50%,0 100%)}
+.is-pending .signal-chip i {background:#ffd375}.is-pending .signal-chip i::after {inset:3px 4px;background:#684a23;clip-path:polygon(0 0,100% 0,65% 50%,100% 100%,0 100%,35% 50%)}
+.road-control:focus-visible .signal-chip,.road-control:hover .signal-chip {outline:2px solid white;outline-offset:1px}
+.road-control .signal-state {position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+.lane-readout {position:absolute;top:calc(50% + 13px);display:flex;align-items:center;gap:3px;border-radius:5px;color:white;background:#293839eb;font:700 11px/14px system-ui;white-space:nowrap;pointer-events:none}
+.lane-readout>*:not(:empty) {margin-inline:2px}.lane-readout>*:empty {display:none}
+.turn-arrow {font-family:Arial,sans-serif}.jam-count {color:#ffdb83}
+.circuit-served .signal-chip {border-bottom:3px solid #a7e49f}
+.is-danger .signal-chip {outline:2px solid #efb45e}.tutorial-pulse .signal-chip {outline:2px solid #fbd46e}
+@media (prefers-reduced-motion:no-preference) {.tutorial-pulse .signal-chip {animation:signal-lesson 1.6s ease-in-out infinite}}
+@keyframes signal-lesson {50% {box-shadow:0 0 0 5px #ffda7770}}
+@media (pointer:coarse) {.signal-chip kbd {display:none}.signal-chip .compass {display:inline}}
+.stop-all kbd {font:800 15px/1 system-ui}.game-footer .stop-all {gap:5px}
+@media (pointer:coarse) {.stop-all kbd {display:none}}
 #detour {pointer-events:auto;max-width:39%;padding:7px 10px;border:2px solid #6c512f;border-radius:9px;background:#ffda86;color:#3c342c;font-weight:850;line-height:1.2}
 #detour[hidden]{display:none}
 .settlement-note {font-weight:800;color:#3d5145}
 .branch-survey {--branch:#725320;--light:#f5e0a0}
 .branch-ledger {--branch:#8a4b34;--light:#f5ddbf}
-.skill-branch>h2 {margin:0;padding:10px 17px;background:var(--light);color:var(--branch);font-size:18px;font-weight:950}
-.skill-branch ol {list-style:none;margin:0;padding:17px 14px}
-.skill-node {position:relative;display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:start}
-.skill-node+.skill-node {margin-top:18px}
-.skill-node:not(:last-child)::after {content:"";position:absolute;top:34px;bottom:-18px;left:16px;width:2px;background:#d4c8af}
-.equipment-icon {position:relative;display:grid;place-items:center;width:34px;height:34px;border:1px solid #b7ad93;border-radius:8px;background:#f3e8cd;color:var(--branch)}
-.equipment-icon svg {width:22px;height:22px}.owned .equipment-icon {background:var(--branch);color:#fff3cd;border-color:var(--branch)}
-.skill-node h3 {margin:1px 0 4px;font-size:17px;line-height:1.2;color:#2b413b}
-.skill-node p,.review-card p {font-size:14px;line-height:1.37;font-weight:680;color:#41483d;margin:4px 0 9px}
-.skill-node>div>small {display:block;margin-top:4px;color:#6a5a42;font-size:12px}
+.talent-title {display:flex;align-items:center;justify-content:space-between;gap:12px;margin:22px 0 0}
+.talent-title h2 {margin:0;font-size:25px}.talent-title b {color:#654a24;font-size:14px}
+.skill-branch {display:flex;flex-direction:column}
+.skill-branch>h2 {display:flex;align-items:center;gap:8px;margin:0;padding:11px 14px;background:var(--light);color:var(--branch);font-size:17px;line-height:1.2}
+.skill-branch>h2 svg {width:21px;height:21px;flex:none}
+.talent-map {display:grid;justify-items:center;gap:14px;padding:14px 9px;background:radial-gradient(#bcae904d .8px,transparent .9px) 0 0/9px 9px}
+.talent-node {display:flex;flex-direction:column;justify-content:center;gap:1px;width:100%;min-height:47px;padding:5px 4px;background:#fff9eb;color:#344239;border:1px solid #a99e82;border-radius:8px;box-shadow:0 2px #d9ceb3;font-size:12px;line-height:1.13;text-align:center;z-index:1}
+.talent-map>.talent-node {width:60%}.talent-node small {font-size:11px;color:#675739}.talent-node.locked {border-style:dashed}
+.talent-node.owned {background:var(--light);border-color:var(--branch)}.talent-node[aria-pressed=true] {outline:2px solid var(--branch);outline-offset:1px}
+.talent-node:focus-visible {outline:3px solid #1563a1;outline-offset:2px}
+.talent-split {display:grid;position:relative;grid-template-columns:1fr 1fr;gap:6px;width:100%}
+.talent-split::before,.talent-split::after {content:"";position:absolute;left:25%;right:25%;height:14px;border-inline:2px solid #b7ab8c;border-image:linear-gradient(transparent 45%,#b7ab8c 45%) 1;background:linear-gradient(#a29576,#a29576) top/2px 50% no-repeat,linear-gradient(#a29576,#a29576) center/100% 2px no-repeat}
+.talent-split::before {top:-14px}.talent-split::after {bottom:-14px;transform:rotate(180deg)}
+.talent-detail {display:flex;flex:1;flex-direction:column;align-items:flex-start;border-top:1px solid #ded2b9;padding:12px 14px;gap:5px}
+.talent-detail h3 {font-size:16px;margin:0;color:#29433b}
+.talent-detail p,.review-card p {font-size:14px;line-height:1.37;font-weight:650;color:#41483d;margin:0 0 4px}
+.talent-detail small {color:#715535;font-size:12px}.talent-detail .skill-buy {margin-top:auto}
 .skill-buy,.cert-options button {min-height:33px;height:auto;padding:6px 10px;background:var(--branch,#3d6456);border:1px solid #365243;color:#fff7e0;border-radius:6px;font-size:12px;line-height:1.25;font-weight:860}
 .skill-buy:disabled,.cert-options button:disabled {opacity:1;background:#eee8d7;color:#636250;border-color:#c7bda6;box-shadow:none}
-.owned .skill-buy:disabled {background:var(--light);color:var(--branch)}
 .review-card {padding:14px 18px 16px;border:1px dashed #a49473;background:#f3ead4;border-radius:11px;margin:0 0 25px}
 .review-card h2 {margin:5px 0;font-size:22px}.review-card p {max-width:63ch}
 .review-card progress {height:8px;width:100%;display:block;margin:11px 0 12px;accent-color:#558069}

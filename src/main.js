@@ -47,8 +47,7 @@ class App {
     await Promise.all([...['miro-portrait.jpg','junior-shops.png'].map(name=>new Promise(resolve=>{const image=new Image();image.onload=image.onerror=resolve;image.src='./assets/'+name;})),document.fonts?.load('900 24px Nunito').catch(()=>{})]);
     await loading(100);
     this.show('menu');this.platform.ready();for(const key of notices)this.ui.toast(key);
-    if(globalThis.PointerEvent)this.view.canvas.addEventListener('pointerdown',e=>this.canvasInput(e));
-    else this.view.canvas.addEventListener('click',e=>this.canvasInput(e));
+    this.view.canvas.addEventListener('click',e=>this.canvasInput(e));
     this.lastFrame=performance.now();this.lastHUD=0;this.animate=this.frame.bind(this);requestAnimationFrame(this.animate);
     if(__DEV__) {const {installDebug}=await import('./debug.js');installDebug(this);}
   }
@@ -95,7 +94,7 @@ class App {
     if(mode==='story'&&(shift<0||shift>7||(shift>0&&!this.progress.data.story[shift-1])))return;
     this.runStart={rank:this.progress.rank,story:[...this.progress.data.story],collection:Object.keys(this.progress.data.collection),reputation:this.progress.data.reputation};this.unlocks=[];
     this.progress.start();this.nextAutosave=5;this.shift=shift;this.isBest=false;this.oldBest=this.progress.data.best[mode];this.autoResume=false;
-    this.game=new Simulation({mode,shift,map:this.map(),radio:this.progress.hasSkill('radio'),survey:this.progress.hasSkill('survey'),crew:this.progress.hasSkill('crew'),incident:this.dispatchKind,emit:(name,data)=>this.event(name,data)});
+    this.game=new Simulation({mode,shift,map:this.map(),skills:[...this.progress.data.career.certified,...this.progress.data.career.learned],incident:this.dispatchKind,emit:(name,data)=>this.event(name,data)});
     this.view.setMap(this.game.map);this.view.bind(this.game);this.view.baseAngle=0;this.view.zoom=1;this.input.clear();this.show('gameplay');
     if([...this.pause.reasons].some(r=>r!=='screen'))this.show('paused');
     this.audio.unlock();
@@ -160,6 +159,7 @@ class App {
     else if(name==='continue'){this.shift=this.progress.data.story.findIndex(m=>!m);if(this.shift<0)this.shift=7;this.show('brief');}
     else if(name==='progress' && ['menu','results'].includes(this.screen)){this.progressBack=this.screen;this.show('progress');}
     else if(['story','collection','challenges'].includes(name))this.show(name);
+    else if(name==='inspectSkill' && this.screen==='progress')this.ui.inspectSkill(value);
     else if(name==='learn' && this.screen==='progress' && this.progress.learn(value)){
       this.view.setMap(this.map(),this.progress.data.career);
       this.audio.event('unlock');this.ui.refreshStation(value);this.ui.toastText(t('installed')+' · '+t('skill_'+value));
@@ -222,8 +222,8 @@ class App {
   canvasInput(e) {
     if(this.screen==='photo'){document.querySelector('#app').classList.remove('photo-hidden');return;}
     if(this.screen!=='gameplay'||this.pause.paused)return;const rect=this.view.canvas.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
-    let best=-1,dist=90;for(const d of this.game.directions){const p=this.view.roadPoint(d),v=Math.hypot(p.x-x,p.y-y);if(v<dist){best=d;dist=v;}}
-    if(best>=0){this.audio.unlock();this.input.push('toggle',best);}
+    const direction=this.view.roadAt(x,y,this.game.directions);
+    if(direction!==undefined){this.audio.unlock();this.input.push('toggle',direction);}
   }
   frame(now) {
     const cpuStart=performance.now();this.frameMs=(this.frameMs??16.67)*.95+(now-this.lastFrame)*.05;

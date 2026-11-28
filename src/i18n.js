@@ -216,5 +216,19 @@ Object.assign(strings.en,{
   brief6:'The crew needs the east exit. Release other routes. If the first driver is blocked, use Detour or R, check the new turn, then give them green.',
   brief7:'An exclamation mark above a driver means they may run a red light. Use All Stop while they are still at the line.'
 });
+Object.assign(strings.ru,{
+  entryQueued:'ожидает места на въезде',shifts:'Смены',contracts:'Районные заказы',schoolRun:'К первому звонку',dockRun:'Погрузка у причала',
+  schoolRunBrief:'По кварталу пройдут три школьных автобуса. Проведи хотя бы два автобуса по расписанию и дай пешеходам перейти дорогу. Ромб у въезда отмечает заказной транспорт.',
+  dockRunBrief:'У восточного причала два окна погрузки. Грузовики подходят с трёх сторон. Проведи хотя бы четыре из шести до закрытия их ворот. Ищи бирюзовые контейнеры и ромб у въезда.',
+  onSchedule:'Рейсы в срок',contractFee:'Надбавка за заказ',signedJobs:'Выполнено',takeJob:'Взять заказ',jobDeadline:'до срока',jobArrival:'прибытие через',scheduleClosed:'Все рейсы по расписанию завершены',scheduledVehicle:'Заказной транспорт',
+  timetable:'Расписание по часам смены',fromRoad:'Въезд',arrivesAt:'Прибытие',dueAt:'Срок'
+});
+Object.assign(strings.en,{
+  entryQueued:'waiting for space at the entrance',shifts:'Shifts',contracts:'District contracts',schoolRun:'First bell',dockRun:'Loading at the quay',
+  schoolRunBrief:'Three school buses are due through the neighbourhood. Get at least two through before their deadlines and give pedestrians a chance to cross. A diamond marks contract traffic.',
+  dockRunBrief:'Two loading windows at the east quay. Trucks arrive from three approaches. Get at least four of the six through before their gates close. Look for teal containers and the diamond at the entrance.',
+  onSchedule:'On-time runs',contractFee:'Contract premium',signedJobs:'Completed',takeJob:'Take contract',jobDeadline:'time left',jobArrival:'arrives in',scheduleClosed:'All scheduled runs have ended',scheduledVehicle:'Contract vehicle',
+  timetable:'Schedule on the shift clock',fromRoad:'Approach',arrivesAt:'Arrival',dueAt:'Deadline'
+});
 export function translator(lang) {return key=>strings[lang]?.[key]??strings.en[key]??key;}
 

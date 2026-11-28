@@ -1,24 +1,25 @@
-import { VEHICLES, MISSIONS, COSMETICS, BALANCE as B, RANKS, INTERSECTIONS, AD_COINS, TRAINING, SERVICE } from './config.js';
+import { VEHICLES, MISSIONS, COSMETICS, BALANCE as B, RANKS, INTERSECTIONS, AD_COINS, TRAINING, SERVICE, CONTRACTS } from './config.js';
 import { clamp, medalFor } from './systems.js';
 export const SAVE_KEY='traffino.save.v2';
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 export function futureSave(raw) {try{return (typeof raw==='string'?JSON.parse(raw):raw)?.version>SAVE_VERSION;}catch{return false;}}
 const integer=(v, max=1e12)=>Number.isFinite(v)?clamp(Math.floor(v),0,max):0;
 const statistic=v=>Number.isFinite(v)?clamp(v,0,1e12):0;
 export function freshSave() {
-  return {version:SAVE_VERSION,career:{ served:0, learned:[], certified:[] },updatedAt:0,revision:0,reputation:0,coins:0,story:Array(8).fill(0),collection:{},best:{endless:0,rush:0,hardcore:0,highway:0,story:0},totals:{},missions:{},daily:{date:'',progress:{},claimed:[]},session:{progress:{},claimed:[]},cosmetics:['classic'],selectedCosmetic:'classic',map:'garden',settings:{master:.65,music:.35,sfx:.7,language:'',shake:true,haptics:false,quality:'medium'},runs:0,adRewardRun:0};
+  return {version:SAVE_VERSION,contracts:{schoolRun:0,dockRun:0},career:{ served:0, learned:[], certified:[] },updatedAt:0,revision:0,reputation:0,coins:0,story:Array(8).fill(0),collection:{},best:{endless:0,rush:0,hardcore:0,highway:0,story:0,schoolRun:0,dockRun:0},totals:{},missions:{},daily:{date:'',progress:{},claimed:[]},session:{progress:{},claimed:[]},cosmetics:['classic'],selectedCosmetic:'classic',map:'garden',settings:{master:.65,music:.35,sfx:.7,language:'',shake:true,haptics:false,quality:'medium'},runs:0,adRewardRun:0};
 }
 export function parseSave(raw) {
   try {
     const x=typeof raw==='string'?JSON.parse(raw):raw;
     if(!x||typeof x!=='object'||Array.isArray(x))return null;
-    if(![1, 2, 3, 4, SAVE_VERSION].includes(x.version))return null;
+    if(![1, 2, 3, 4, 5, SAVE_VERSION].includes(x.version))return null;
     const s=freshSave();
     s.updatedAt=integer(x.updatedAt,Number.MAX_SAFE_INTEGER);
     for(const k of ['revision','reputation','coins','runs','adRewardRun'])s[k]=integer(x[k]);
     s.story=s.story.map((_,i)=>clamp(integer(x.story?.[i]),0,3));
     for(const k of Object.keys(s.best))s.best[k]=integer(x.best?.[k]);
-    for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits','promptPasses','northConvoy','southConvoy'])s.totals[k]=statistic(x.totals?.[k]);
+    for(const k of ['score','playTime','day','passed','cars','buses','emergencyPassed','emergencyFailed','pedestrians','collisions','jams','maxFlow','longestWait','longestQueue','rushHours','eventsCompleted','nights','cleanShifts','circuits','promptPasses','northConvoy','southConvoy','onSchedule'])s.totals[k]=statistic(x.totals?.[k]);
+    for(const id of Object.keys(CONTRACTS))s.contracts[id]=integer(x.contracts?.[id]);
     const career = s.career;
     career.served = integer(x.version < 3 ? s.totals.passed : x.career?.served);
     if (x.version >= 3) {
@@ -140,6 +141,7 @@ export class Progress {
         bonus+=Math.max(0,medal-previous)*SERVICE.medalCoins;
         this.data.story[game.shift]=Math.max(previous,medal);
       }
+      if(game.contract){bonus+=game.contract.fee;this.data.contracts[game.mode]++;}
       this.settle(game.dutyRecord(), bonus, true);
     }
     this.finishedReward = { ...this.payroll, medal, reputation:game.stats.passed*B.reputationPerCar+game.stats.emergencyPassed*B.emergencyReputation+(game.reason==='complete'?25:0) };
@@ -205,6 +207,11 @@ export class Progress {
   }
   get rank() {return RANKS.filter(x=>this.data.reputation>=x).length-1;}
   rewardAd(run) {if(!this.finishedReward?.periods||this.readOnly||run!==this.data.runs||run<=0||this.data.adRewardRun===run)return false;this.data.adRewardRun=run;this.data.coins+=AD_COINS;this.save();return true;}
+  canTakeContract(id) {
+    if(!Object.hasOwn(CONTRACTS,id))return false;
+    const district=INTERSECTIONS.find(map=>map.id===CONTRACTS[id].district);
+    return this.endlessUnlocked && this.data.reputation>=district.unlock;
+  }
   get endlessUnlocked() {return this.data.story[0]>0;}
   reset() {this.readOnly=false;this.data=freshSave();this.last={};this.resetPayroll();this.rollDaily();try{this.storage?.removeItem(SAVE_KEY+'.backup');this.storage?.removeItem(SAVE_KEY);}catch{}this.save();}
 }

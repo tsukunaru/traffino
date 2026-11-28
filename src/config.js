@@ -44,6 +44,20 @@ export const STORY = [
   { duration: 100, density: .53, goal: 18, objectives: [{stat:'eventsCompleted',target:1}], turns: true, tier: 3, pedestrians: true, events: true, medals: [850, 1350], wait: [26, 17], flow: [1.8, 2.5] },
   { seed: 1003, duration: 120, density: .55, goal: 24, objectives: [{stat:'emergencyPassed',target:1},{stat:'pedestrians',target:3},{stat:'eventsCompleted',target:1}], turns: true, tier: 3, pedestrians: true, events: true, medals: [1200, 1900], wait: [26, 17], flow: [2, 2.7] },
 ];
+// District timetables use elapsed shift seconds. Freight for each sailing shares its closing time.
+export const CONTRACTS = {
+  schoolRun: {
+    district:'garden', seed:107, vehicle:'schoolbus', duration:90, goal:16, fee:8, density:.34, tier:0, turns:true, pedestrians:true,
+    objectives:[{stat:'onSchedule',target:2},{stat:'pedestrians',target:3}],
+    runs:[{at:3,due:25,direction:0,turn:0},{at:29,due:51,direction:2,turn:0},{at:55,due:77,direction:0,turn:0}]
+  },
+  dockRun: {
+    district:'harbor', seed:28, vehicle:'truck', duration:105, goal:22, fee:12, density:.39, tier:1, turns:true,
+    objectives:[{stat:'onSchedule',target:4}],
+    runs:[{at:3,due:34,direction:3,turn:0},{at:9,due:34,direction:0,turn:1},{at:15,due:34,direction:2,turn:2},
+          {at:48,due:80,direction:2,turn:2},{at:55,due:80,direction:3,turn:0},{at:62,due:80,direction:0,turn:1}]
+  }
+};
 export const EVENTS = ['broken', 'works', 'turn', 'surge', 'wave', 'delivery'];
 export const TRAINING = [
   { id:'board', branch:'board', cost:48, requires:[] },

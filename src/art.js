@@ -15,7 +15,7 @@ export function lightPhase(time,out={}) {
   out.index=i;out.blend=(t-SKY[i][0])/(SKY[i+1][0]-SKY[i][0]);out.night=Math.max(0,Math.min(1,Math.max((.25-t)/.075,(t-.72)/.11)));return out;
 }
 
-export function vehicleParts(kind) {
+export function vehicleParts(kind,onDuty=false) {
   const v=VEHICLES[kind],w=v.width,l=v.length,p=[],big=v.bus||['truck','van','ambulance','firetruck','garbage'].includes(kind);
   const part=(x,y,z,sx,sy,sz,color,role='body')=>p.push({x,y,z,sx,sy,sz,color,role});
   const c=kind==='ambulance'?PALETTE.white:v.color;
@@ -28,7 +28,7 @@ export function vehicleParts(kind) {
     part(0,.83,l*.48,w*.94,.15,.045,PALETTE.cream);
   }else if(big){
     part(0,1.08,l*.26,w*.93,.8,l*.37,c);part(0,1.24,l*.447,w*.79,.43,.04,PALETTE.glass);
-    const cargo=kind==='truck'?0xd5af78:kind==='garbage'?0x689c7d:c;
+    const cargo=kind==='truck'?(onDuty?0x297b7b:0xd5af78):kind==='garbage'?0x689c7d:c;
     part(0,1.16,-l*.19,w*.99,1.10,l*.58,cargo);
     part(0,1.76,-l*.20,w,.12,l*.60,kind==='firetruck'?0xffeed0:cargo);
     for(const side of [-1,1])part(side*w*.47,1.24,l*.26,.045,.38,l*.24,PALETTE.glass);
@@ -60,6 +60,11 @@ export function vehicleParts(kind) {
   part(0,.447,-l*.492,w*.26,.095,.025,PALETTE.cream);
   part(0,.46,l*.48,w*.88,.16,.14,PALETTE.cream);part(0,.44,-l*.48,w*.83,.13,.12,PALETTE.ink);
   for(const side of [-1,1]){part(side*w*.31,.69,l*.48,.26,.20,.045,0xffebb4,'headlight');part(side*w*.33,.69,-l*.482,.24,.17,.045,0xb54f4b,'brake');part(side*w*.43,.74,l*.44,.12,.12,.08,0xe5a454,'indicator');}
+  if(onDuty){
+    if(kind==='truck')for(const z of [-1.72,-.16])part(0,1.27,z,1.63,1.16,.09,0xe9cf88);
+    part(0,1.91,-.8,.95,.08,.95,0x31444a);p.at(-1).yaw=Math.PI/4;
+    part(0,1.97,-.8,.71,.05,.71,0xffdc79);p.at(-1).yaw=Math.PI/4;
+  }
   if(v.emergencyPriority)for(const side of [-1,1])part(side*.25,big?1.89:1.48,big?l*.24:0,.32,.20,.27,side<0?0xf57e65:0x83c9ff,'siren');
   return p;
 }

@@ -1,6 +1,6 @@
 import 'core-js/stable';
 import { Simulation } from './simulation.js';
-import { BALANCE as B, INTERSECTIONS } from './config.js';
+import { BALANCE as B, INTERSECTIONS, CONTRACTS } from './config.js';
 import { PauseState, InputCommands } from './systems.js';
 import { Progress, parseSave, selectSave, futureSave } from './progress.js';
 import { Platform } from './platform.js';
@@ -88,13 +88,15 @@ class App {
   }
   start(mode,shift=0) {
     if(this.transitioning)return;
+    const job=Object.hasOwn(CONTRACTS,mode)?CONTRACTS[mode]:null;
+    if(job&&!this.progress.canTakeContract(mode))return;
     if(mode==='endless'&&!this.progress.endlessUnlocked)return;
     if(mode==='rush'&&!this.progress.data.story[3])return;
     if(mode==='hardcore'&&!this.progress.data.story[7])return;
     if(mode==='story'&&(shift<0||shift>7||(shift>0&&!this.progress.data.story[shift-1])))return;
     this.runStart={rank:this.progress.rank,story:[...this.progress.data.story],collection:Object.keys(this.progress.data.collection),reputation:this.progress.data.reputation};this.unlocks=[];
     this.progress.start();this.nextAutosave=5;this.shift=shift;this.isBest=false;this.oldBest=this.progress.data.best[mode];this.autoResume=false;
-    this.game=new Simulation({mode,shift,map:this.map(),skills:[...this.progress.data.career.certified,...this.progress.data.career.learned],incident:this.dispatchKind,emit:(name,data)=>this.event(name,data)});
+    this.game=new Simulation({mode,shift,map:this.map(),seed:job?job.seed+this.progress.data.contracts[mode]:undefined,skills:[...this.progress.data.career.certified,...this.progress.data.career.learned],incident:this.dispatchKind,emit:(name,data)=>this.event(name,data)});
     this.view.setMap(this.game.map);this.view.bind(this.game);this.view.baseAngle=0;this.view.zoom=1;this.input.clear();this.show('gameplay');
     if([...this.pause.reasons].some(r=>r!=='screen'))this.show('paused');
     this.audio.unlock();
@@ -102,6 +104,7 @@ class App {
   event(name,data) {
     this.audio.event(name,data);this.view?.event(name,data);
     if(name==='vehicleSpawned'){const fresh=!this.progress.data.collection[data.kind];this.progress.seen(data);if(fresh&&this.screen==='gameplay'){this.audio.event('unlock');this.ui.toastText(this.ui.t('newVehicle')+': '+this.ui.t(data.kind));}}
+    if(name==='orderDelivered')this.audio.event('mission');
     if(name==='vehiclePassed')this.progress.passed(data);
     if(name==='dutyClosed') {
       this.progress.sync(this.game.stats,this.game.mode,false);
@@ -122,6 +125,7 @@ class App {
       this.unlocks=[];if(this.progress.rank>start.rank)this.unlocks.push(t('rankUp')+': '+t('rank'+this.progress.rank));
       for(const [i,key] of [[0,'endless'],[3,'rush'],[7,'hardcore']])if(!start.story[i]&&s.story[i])this.unlocks.push(t('unlocked')+': '+t(key));
       for(const map of INTERSECTIONS)if(start.reputation<map.unlock&&s.reputation>=map.unlock)this.unlocks.push(t('unlocked')+': '+t(map.id));
+      if(!start.story[0]&&s.story[0])this.unlocks.push(t('unlocked')+': '+t('contracts'));
       const found=Object.keys(s.collection).filter(id=>!start.collection.includes(id));if(found.length)this.unlocks.push(t('newVehicle')+': '+found.map(t).join(', '));
       if(this.unlocks.length)this.audio.event('unlock');
       if(['collision','pedestrian'].includes(this.game.reason)){
@@ -150,6 +154,11 @@ class App {
     if(name==='routes') {this.view.showRoutes=!this.view.showRoutes;button?.setAttribute('aria-pressed',String(this.view.showRoutes));return;}
     if(name==='dispatch'&&this.screen==='menu')this.show('dispatch');
     else if(name==='takeDispatch'&&this.screen==='dispatch'&&['repair','crash'].includes(value)){this.dispatchKind=value;this.start('highway');}
+    else if(name==='contract'&&this.screen==='story'&&this.progress.canTakeContract(value))this.start(value);
+    else if(name==='shiftTab'&&this.screen==='story'&&['story','contracts'].includes(value)){
+      this.shiftTab=value;this.ui.render();
+      this.ui.root.querySelector('[data-action="shiftTab"][data-value="'+value+'"]').focus({preventScroll:true});
+    }
     else if(name==='play')this.start(value);
     else if(name==='report' && this.screen==='incident'){
       this.view.photoSubject=null;this.view.zoom=1;this.view.baseAngle=0;this.show('results');

@@ -71,6 +71,23 @@
 .settlement-note {font-weight:800;color:#3d5145}
 .branch-survey {--branch:#725320;--light:#f5e0a0}
 .branch-ledger {--branch:#8a4b34;--light:#f5ddbf}
+.panel-story>header {margin-bottom:8px}.panel-story h1 {margin:0 0 10px;font-size:clamp(32px,4vw,46px)}
+.shift-tabs {margin:10px 0 16px}
+.shift-tabs button[aria-pressed=true],.shift-tabs button[aria-pressed=true]:hover:not(:disabled) {background:#375e54;color:#fff5d9;border-color:#294b42}
+.contract-list {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));gap:14px}
+.contract-card {display:flex;flex-direction:column;align-items:stretch;padding:16px 18px;gap:9px;background:#fff5db;border:1px solid #bbaa87;border-top:5px solid #bc762c;border-radius:10px;color:#38443d}
+.contract-card:nth-child(2) {background:#edf4e9;border-top-color:#42766c}
+.contract-card header,.contract-card footer {display:flex;align-items:center;justify-content:space-between;gap:10px}
+.panel .contract-card header {font-size:12px;font-weight:800;margin:0}
+.contract-art {display:grid;place-items:center;border-block:1px solid #b9a47a55;background:linear-gradient(152deg,transparent 0 37%,#e9d5a6 37% 49%,#f4e5c3 49% 50%,#e9d5a6 50% 62%,transparent 62%),#f8edcf}
+.contract-card:nth-child(2) .contract-art {background:linear-gradient(152deg,transparent 0 37%,#bbd1c7 37% 49%,#e7eddf 49% 50%,#bbd1c7 50% 62%,transparent 62%),#dfeadc}
+.contract-art img {width:155px;height:84px;object-fit:contain}
+.contract-card h2 {font-size:23px;line-height:1.1;margin:0}.contract-card p {font-size:14px;line-height:1.4;margin:0}
+.contract-card .contract-quota {font-weight:800}.contract-card details {font-size:13px}.contract-card summary {cursor:pointer}
+.contract-card table {border-collapse:collapse;width:100%;margin-top:5px;text-align:left;font-variant-numeric:tabular-nums}
+.contract-card th,.contract-card td {padding:3px;border-bottom:1px solid #cdbf9b}
+.contract-card footer {margin-top:auto;padding-top:8px;font-size:13px}.contract-card button {align-self:flex-start}
+.order-tag {color:#ffe08d;font-style:normal}.order-tag[hidden] {display:none}
 .talent-title {display:flex;align-items:center;justify-content:space-between;gap:12px;margin:22px 0 0}
 .talent-title h2 {margin:0;font-size:25px}.talent-title b {color:#654a24;font-size:14px}
 .skill-branch {display:flex;flex-direction:column}

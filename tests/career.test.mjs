@@ -2,8 +2,46 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Progress, freshSave, parseSave, SAVE_KEY } from '../src/progress.js';
 import { Simulation } from '../src/simulation.js';
-import { BALANCE, SERVICE } from '../src/config.js';
+import { BALANCE, SERVICE, CONTRACTS } from '../src/config.js';
 import { playBot } from './bot.mjs';
+
+test('district timetables pay only signed contracts and keep the home district',()=>{
+  const p=new Progress();
+  p.data=parseSave({...freshSave(),version:5,contracts:undefined,coins:19});
+  assert.equal(p.canTakeContract('schoolRun'),false);
+  p.data.story[0]=1;p.data.reputation=419;
+  assert.ok(p.canTakeContract('schoolRun'));assert.equal(p.canTakeContract('dockRun'),false);
+  p.data.reputation++;
+  for(const [mode,job] of Object.entries(CONTRACTS)){
+    assert.ok(p.canTakeContract(mode));p.start();
+    const opening=p.data.coins,g=new Simulation({mode,seed:job.seed});
+    playBot(g);assert.equal(g.reason,'complete');assert.equal(g.map.id,job.district);
+    assert.ok(g.stats.onSchedule>=job.objectives[0].target);
+    const receipt=p.finish(g);
+    assert.equal(receipt.bonus,BALANCE.completionCoins+job.fee);
+    assert.equal(p.finish(g),receipt);assert.equal(p.data.coins,opening+receipt.coins);
+    assert.equal(parseSave(p.data).contracts[mode],1);
+    p.start();const failed=new Simulation({mode,director:false});failed.stats.passed=job.goal;failed.elapsed=job.duration;failed.tick();
+    assert.equal(failed.reason,'goal');assert.equal(p.finish(failed).coins,0);assert.equal(p.data.contracts[mode],1);
+  }
+  assert.equal(p.data.map,'garden');
+});
+
+test('a blocked entrance holds its manifest while other approaches can dispatch',()=>{
+  const g=new Simulation({mode:'dockRun',director:false});
+  const blocker=g.spawn(3,'truck',0);
+  g.elapsed=10;g.tick();
+  assert.deepEqual(g.orders.slice(0,2).map(o=>o.status),['scheduled','enroute']);
+  // An ordinary truck in the same lane is outside the manifest.
+  g.pass(blocker);assert.equal(g.stats.onSchedule,0);
+  g.elapsed=11;g.tick();
+  const load=g.vehicles.find(v=>v.active&&v.order===g.orders[0]);
+  assert.equal(load.route.exit,1);
+  g.elapsed=g.orders[0].due+1;g.tick();
+  assert.equal(load.order.status,'missed');
+  g.pass(load);assert.equal(g.stats.onSchedule,0);
+  assert.equal(g.stats.passed,2);
+});
 
 test('old profiles keep earnings and receive service credit exactly once', () => {
   for (const version of [1, 2]) {

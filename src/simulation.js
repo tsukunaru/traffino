@@ -1,4 +1,4 @@
-import { BALANCE as B, VEHICLES, STORY, INTERSECTIONS, EVENTS, SERVICE } from './config.js';
+import { BALANCE as B, VEHICLES, STORY, INTERSECTIONS, CONTRACTS, EVENTS, SERVICE } from './config.js';
 import { makeRoutes, conflictMatrix, sample, overlaps, rotate } from './routes.js';
 import { random, difficulty, flowAfter, passScore, clamp, storyGoalMet } from './systems.js';
 
@@ -7,6 +7,8 @@ import { HIGHWAY, ROAD_DUTY, highwayIncident, highwayRoute, selectConvoy, update
 export class Simulation {
   constructor({ mode='endless', shift=0, map=INTERSECTIONS[0], seed, emit=()=>{}, director=true, skills=[], radio=skills.includes('radio'), survey=skills.includes('survey'), crew=skills.includes('crew'), incident='repair' } = {}) {
     seed ??= mode==='story'?(STORY[shift].seed??1000+shift):Date.now();
+    this.contract=Object.hasOwn(CONTRACTS,mode)?CONTRACTS[mode]:null;
+    if(this.contract)map=INTERSECTIONS.find(m=>m.id===this.contract.district);
     if(mode==='highway')map=HIGHWAY;
     this.mode=mode; this.shift=shift; this.map=map; this.emit=emit; this.rng=random(seed); this.seed=seed;
     this.emergencyLimit = B.emergencyTimer + (radio ? SERVICE.radioSeconds : 0);
@@ -31,13 +33,17 @@ export class Simulation {
     this.trafficProfile={};this.spawnClock=1; this.serial=0; this.event=null; this.tutorial=mode==='story'&&shift===0 ? 0 : 4;
     this.densityScale=1; this.invulnerable=false; this.guaranteed=false;
     this.stats={score:0,playTime:0,day:1,passed:0,cars:0,buses:0,emergencyPassed:0,emergencyFailed:0,pedestrians:0,collisions:0,jams:0,maxFlow:1,averageWait:0,totalWait:0,longestWait:0,longestQueue:0,rushHours:0,eventsCompleted:0,nights:0,cleanShifts:0};
-    this.level=mode==='story'?STORY[shift]:mode==='highway'?ROAD_DUTY:null; this.duration=this.level?.duration??(mode==='rush'?B.rushDuration:Infinity);
+    this.level=mode==='story'?STORY[shift]:mode==='highway'?ROAD_DUTY:this.contract; this.duration=this.level?.duration??(mode==='rush'?B.rushDuration:Infinity);
     if(this.level?.objectives?.some(o=>o.stat==='pedestrians'))this.waitingPeople[1]=3;
     // Rush Hour rewards clearing every approach between collisions.
     this.circuit = mode === 'rush' ? new Set() : null;
     this.stats.circuits = 0;
     this.stats.promptPasses = 0;
     this.forcedQueue=[];
+    if(this.contract){
+      this.stats.onSchedule=0;
+      this.orders=this.contract.runs.map(run=>({...run,status:'scheduled',tryAt:run.at}));
+    }
     this.renderVehicles=this.vehicles;
     if(mode==='highway'){
       this.highway=highwayIncident(this,incident==='crash'?'crash':'repair');
@@ -106,7 +112,7 @@ export class Simulation {
     if(this.event?.phase==='active'&&this.event.kind==='turn'&&this.event.direction===direction&&turn===1)turn=0;
     const choices=this.routesByDirection[this.directions.indexOf(direction)];
     const route=this.highway?highwayRoute(this,direction):choices.find(r=>r.turn===turn)??choices[0];if(!route)return null;turn=route.turn;
-    Object.assign(v,{active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:this.emergencyLimit,emergencyFailed:false,crashLeft:0,broken:0,runnerAt:null,obey:Boolean(this.highway),convoy:false});
+    Object.assign(v,{order:null,active:true,serial:++this.serial,kind,direction,route,turn,s:0,speed:0,maxSpeed:def.speed*(.94+this.rng()*.12),length:def.length,width:def.width,wait:0,age:0,committed:false,state:'Spawning',emergencyLeft:this.emergencyLimit,emergencyFailed:false,crashLeft:0,broken:0,runnerAt:null,obey:Boolean(this.highway),convoy:false});
     sample(route,0,v); this.emit('vehicleSpawned',v);
     if(def.emergencyPriority)this.emit('emergency',v);
     return v;
@@ -164,6 +170,7 @@ export class Simulation {
     if(this.day>oldDay) { this.stats.nights++; this.stats.score+=B.score.day; this.emit('day',{day:this.day}); }
     if((oldPhase<.36&&this.timeOfDay>=.36)||(oldPhase<.70&&this.timeOfDay>=.70))this.stats.rushHours++;
     if(this.tutorial===3&&this.stats.passed>=2)this.tutorial=4;
+    if(this.orders)this.updateTimetable();
     if(this.director&&this.tutorial>=3)this.updateDirector(dt);
     this.updateEvent(dt);
     if(this.highway)updateConvoy(this,dt);
@@ -267,6 +274,11 @@ export class Simulation {
     this.flow=flowAfter(this.flow,v.wait,timely&&(def.bus||def.emergencyPriority));
     this.stats.score+=passScore(def,this.flow,timely,this.mode);
     if (v.wait < B.timelyWait && this.flow >= SERVICE.premiumFlow) this.stats.promptPasses++;
+    if(v.order?.status==='enroute'){
+      v.order.status='delivered';
+      this.stats.onSchedule++;
+      this.emit('orderDelivered',v);
+    }
     this.stats.passed++; if(def.bus)this.stats.buses++; else this.stats.cars++;
     if(def.emergencyPriority&&timely)this.stats.emergencyPassed++;
     this.stats.totalWait+=v.wait; this.stats.averageWait=this.stats.totalWait/this.stats.passed;
@@ -316,6 +328,7 @@ export class Simulation {
   crash(a,b) {
     if(this.invulnerable)return;
     this.circuit?.clear();
+    for(const car of [a,b])if(car?.order?.status==='enroute')car.order.status='missed';
     a.runnerAt=null;a.crashLeft=B.wreckTime-this.towDiscount;a.speed=0;a.state='Crashed';
     if(b){b.runnerAt=null;b.crashLeft=a.crashLeft;b.speed=0;b.state='Crashed';}
     this.stats.collisions++;this.flow=Math.max(1,this.flow-.85);this.stats.score=Math.max(0,this.stats.score-B.collisionPenalty);
@@ -345,6 +358,18 @@ export class Simulation {
       rotate(-4.7+9.4*t,-this.map.entry-.8,p.direction,p);
       p.x=(p.fromX??p.x)*(1-join)+p.x*join;p.z=(p.fromZ??p.z)*(1-join)+p.z*join;
       if(p.t>=1){p.active=false;this.stats.pedestrians++;this.stats.score+=Math.round(B.score.pedestrian*this.flow);this.emit('pedestrianPassed',p);}
+    }
+  }
+
+  updateTimetable() {
+    for(const order of this.orders){
+      if(order.status==='delivered'||order.status==='missed')continue;
+      if(this.elapsed>order.due){order.status='missed';continue;}
+      if(order.status==='scheduled'&&this.elapsed>=order.tryAt){
+        const car=this.spawn(order.direction,this.contract.vehicle,order.turn);
+        if(car){car.order=order;order.status='enroute';}
+        else order.tryAt=this.elapsed+.5;
+      }
     }
   }
 

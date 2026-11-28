@@ -111,6 +111,10 @@ try {
     await click('#road-2');await wait('document.querySelector("#road-2 .signal-state").textContent==="Ожидает"');
     await wait('document.querySelector("#road-2").getAttribute("aria-pressed")==="true"');
     check('packaged highway hands the lane to the second convoy',await evaluate('document.querySelector("#road-0").getAttribute("aria-pressed")==="false"&&document.querySelector("#road-1").hidden'));
+    await click('[data-action="pause"]');await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');await click('[data-action="menu"]');
+    await click('[data-action="story"]');await click('[data-action="shiftTab"][data-value="contracts"]');await click('[data-action="contract"][data-value="schoolRun"]');
+    await wait('!document.querySelector("#road-0 .order-tag").hidden');
+    check('packaged school run starts with its timetable and marked bus',await evaluate('document.querySelector("#event-banner").textContent.includes("Север") && document.querySelector("#hud-objectives").textContent.includes("Рейсы в срок")'));
     check('no runtime errors', !errors.length);
     console.log('Windows desktop PASS:', checks);
   } else {
@@ -119,7 +123,48 @@ try {
   await viewport(1280,720);await cdp('Page.navigate',{url});await wait('document.querySelector(".hero")');
   check('ready once with interactive menu',await evaluate('__sdkQA.ready===1'));
   check('station sign and Cyrillic font loaded',await evaluate('document.querySelector(".street-sign").textContent==="Traffino"&&document.fonts.check("900 24px Nunito")'));
-  if(process.argv.includes('--highway')){
+  if(process.argv.includes('--contracts')){
+    await wait('window.__traffino');
+    await evaluate('document.querySelector(".debug-panel").hidden=true;window.solveDuty='+`(${playBot.toString()})`);
+    const jobs=async()=>{await click('[data-action="story"]');await click('[data-action="shiftTab"][data-value="contracts"]');};
+    const startJob=id=>click('[data-action="contract"][data-value="'+id+'"]');
+    await jobs();
+    check('fresh profile can inspect both locked district jobs',await evaluate('document.querySelectorAll(".contract-card button:disabled").length===2'));
+    await click('[data-action="back"]');await click('[data-action="continue"]');await enterShift();
+    await evaluate('solveDuty(__traffino.game)');await wait('document.querySelector(".results")');
+    await click('[data-action="menu"]');await jobs();
+    check('first signed shift opens only the school run',await evaluate('!document.querySelector("[data-value=schoolRun]").disabled && document.querySelector("[data-value=dockRun]").disabled'));
+    await viewport(390,844);await click('.contract-card summary');
+    check('printed clock and six harbor trips fit on a phone',await evaluate('document.querySelector(".panel").scrollWidth<=document.querySelector(".panel").clientWidth+1 && document.querySelectorAll(".contract-card:nth-child(2) tbody tr").length===6 && document.querySelector("tbody").textContent.includes("1:27")'));
+    await click('.contract-card summary');await viewport(1280,720);
+    await startJob('schoolRun');await evaluate('solveDuty(__traffino.game)');
+    check('school crossing and signed runs pay the printed fee',await evaluate('__traffino.game.stats.pedestrians>=3 && __traffino.game.stats.onSchedule>=2 && __traffino.reward.bonus===12 && __traffino.progress.data.contracts.schoolRun===1'));
+    // Exercise the port unlock threshold with the selected home district still set to the garden.
+    await evaluate('__traffino.progress.data.reputation=419;__traffino.progress.save()');
+    await click('[data-action="menu"]');await jobs();
+    check('port requires 420 XP',await evaluate('document.querySelector("[data-value=dockRun]").disabled'));
+    await evaluate('__traffino.progress.data.reputation=420;__traffino.progress.save();__traffino.ui.render()');
+    await wait('!document.querySelector("#toast").classList.contains("show")');
+    await shot('district-jobs','webp');await startJob('dockRun');
+    await evaluate('(()=>{const g=__traffino.game;while(g.elapsed<7)g.tick();__traffino.ui.updateHUD();})()');
+    check('harbor round loads its own map and marks the waiting freight',await evaluate('__traffino.view.map.id==="harbor" && __traffino.progress.data.map==="garden" && !document.querySelector("#road-3 .order-tag").hidden && document.querySelector("#event-banner").textContent.includes("Запад")'));
+    await click('[data-action="pause"]');const timer=await evaluate('__traffino.game.elapsed');await sleep(150);
+    check('paused timetables hold the shift clock',await evaluate('__traffino.game.elapsed')===timer);await click('[data-action="resume"]');
+    await wait('!document.querySelector("#toast").classList.contains("show")');
+    await shot('dock-duty','webp');await evaluate('solveDuty(__traffino.game)');
+    check('signed freight job and its premium appear in results',await evaluate('__traffino.game.reason==="complete" && __traffino.game.stats.onSchedule>=4 && __traffino.reward.bonus===16 && document.querySelector(".pay-slip").textContent.includes("◈ 12")'));
+    await click('[data-action="retry"]');await wait('__traffino.screen==="gameplay"');
+    const trafficSeed=await evaluate('__traffino.game.seed');
+    check('retry preserves the job and home district',await evaluate('__traffino.game.mode==="dockRun" && __traffino.view.map.id==="harbor" && __traffino.progress.data.map==="garden"'));
+    await click('[data-action="pause"]');await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');
+    check('abandoned retry pays zero',await evaluate('__traffino.reward.coins===0 && __traffino.progress.data.contracts.dockRun===1'));
+    await click('[data-action="retry"]');await wait('__traffino.screen==="gameplay"');
+    check('retry after an unsigned duty repeats the same traffic',await evaluate('__traffino.game.seed')===trafficSeed);
+    await click('[data-action="pause"]');await click('[data-action="finish"]');await click('[data-action="confirmFinish"]');
+    await click('[data-action="menu"]');await cdp('Page.reload');await wait('window.__traffino&&document.querySelector(".hero")');await jobs();
+    check('both district stamps survive reopening',await evaluate('__traffino.view.map.id==="garden" && document.querySelectorAll(".contract-card footer small").length===2'));
+    check('contract console clean',errors.length===0);console.log('Contracts PASS: '+checks.length+' checks');
+  }else if(process.argv.includes('--highway')){
     await wait('window.__traffino');await evaluate('document.querySelector(".debug-panel").hidden=true');
     await click('[data-action="dispatch"]');await click('[data-action="takeDispatch"][data-value="crash"]');
     await wait('__traffino.game?.highway&&document.querySelector("#road-0")');
